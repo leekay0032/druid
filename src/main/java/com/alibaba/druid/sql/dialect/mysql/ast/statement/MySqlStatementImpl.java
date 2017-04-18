@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,13 @@ package com.alibaba.druid.sql.dialect.mysql.ast.statement;
 import com.alibaba.druid.sql.ast.SQLStatementImpl;
 import com.alibaba.druid.sql.dialect.mysql.visitor.MySqlASTVisitor;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
+import com.alibaba.druid.util.JdbcConstants;
 
 public abstract class MySqlStatementImpl extends SQLStatementImpl implements MySqlStatement {
+
+    public MySqlStatementImpl() {
+        super(JdbcConstants.MYSQL);
+    }
 
     @Override
     protected void accept0(SQLASTVisitor visitor) {

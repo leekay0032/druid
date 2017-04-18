@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ public class LogicalOperatorsTest extends TestCase {
 
         String text = output(stmtList);
 
-        Assert.assertEquals("SELECT !(1 + 1);", text);
+        Assert.assertEquals("SELECT !1 + 1;", text);
     }
 
     public void test_8() throws Exception {
@@ -156,7 +156,7 @@ public class LogicalOperatorsTest extends TestCase {
 
         String text = output(stmtList);
 
-        Assert.assertEquals("SELECT 0 || NULL;", text);
+        Assert.assertEquals("SELECT 0\n\tOR NULL;", text);
     }
 
     public void test_12() throws Exception {

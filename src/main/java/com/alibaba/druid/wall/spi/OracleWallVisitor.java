@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,6 @@ import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
 import com.alibaba.druid.sql.ast.statement.SQLSetStatement;
 import com.alibaba.druid.sql.ast.statement.SQLUnionQuery;
 import com.alibaba.druid.sql.ast.statement.SQLUpdateStatement;
-import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleAlterTableStatement;
 import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleCreateTableStatement;
 import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleDeleteStatement;
 import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleInsertStatement;
@@ -63,8 +62,9 @@ public class OracleWallVisitor extends OracleASTVisitorAdapter implements WallVi
 
     private final WallConfig      config;
     private final WallProvider    provider;
-    private final List<Violation> violations  = new ArrayList<Violation>();
-    private boolean               sqlModified = false;
+    private final List<Violation> violations      = new ArrayList<Violation>();
+    private boolean               sqlModified     = false;
+    private boolean               sqlEndOfComment = false;
 
     public OracleWallVisitor(WallProvider provider){
         this.config = provider.getConfig();
@@ -322,12 +322,6 @@ public class OracleWallVisitor extends OracleASTVisitorAdapter implements WallVi
     }
 
     @Override
-    public boolean visit(OracleAlterTableStatement x) {
-        WallVisitorUtils.check(this, x);
-        return true;
-    }
-
-    @Override
     public boolean visit(SQLDropTableStatement x) {
         WallVisitorUtils.check(this, x);
         return true;
@@ -346,5 +340,15 @@ public class OracleWallVisitor extends OracleASTVisitorAdapter implements WallVi
     @Override
     public boolean visit(SQLCreateTriggerStatement x) {
         return false;
+    }
+    
+    @Override
+    public boolean isSqlEndOfComment() {
+        return this.sqlEndOfComment;
+    }
+
+    @Override
+    public void setSqlEndOfComment(boolean sqlEndOfComment) {
+        this.sqlEndOfComment = sqlEndOfComment;
     }
 }

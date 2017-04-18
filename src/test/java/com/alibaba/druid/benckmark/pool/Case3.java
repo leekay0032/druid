@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,7 +62,7 @@ public class Case3 extends TestCase {
         driverClass = "com.alibaba.druid.mock.MockDriver";
         // connectionProperties = "connectSleep=3;executeSleep=1";
 
-        // jdbcUrl = "jdbc:mysql://10.20.153.104:3306/druid2";
+        // jdbcUrl = "jdbc:mysql://a.b.c.d:3306/druid2";
         // user = "root";
         // password = "root";
         // driverClass = "com.mysql.jdbc.Driver";

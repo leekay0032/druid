@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.alibaba.druid.sql.ast.SQLExpr;
+import com.alibaba.druid.sql.ast.SQLLimit;
+import com.alibaba.druid.sql.ast.SQLObjectImpl;
+import com.alibaba.druid.sql.ast.SQLOrderBy;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
 
-public class SQLSelectQueryBlock extends SQLSelectQuery {
+public class SQLSelectQueryBlock extends SQLObjectImpl implements SQLSelectQuery {
 
     protected int                       distionOption;
     protected final List<SQLSelectItem> selectList = new ArrayList<SQLSelectItem>();
@@ -30,6 +33,13 @@ public class SQLSelectQueryBlock extends SQLSelectQuery {
     protected SQLExprTableSource        into;
     protected SQLExpr                   where;
     protected SQLSelectGroupByClause    groupBy;
+    protected SQLOrderBy                orderBy;
+    protected boolean                   parenthesized = false;
+    protected boolean                   forUpdate     = false;
+    protected boolean                   noWait        = false;
+    protected SQLExpr                   waitTime;
+
+    protected SQLLimit                  limit;
 
     public SQLSelectQueryBlock(){
 
@@ -55,6 +65,9 @@ public class SQLSelectQueryBlock extends SQLSelectQuery {
     }
 
     public void setGroupBy(SQLSelectGroupByClause groupBy) {
+        if (groupBy != null) {
+            groupBy.setParent(this);
+        }
         this.groupBy = groupBy;
     }
 
@@ -68,6 +81,18 @@ public class SQLSelectQueryBlock extends SQLSelectQuery {
         }
         this.where = where;
     }
+    
+    public SQLOrderBy getOrderBy() {
+        return orderBy;
+    }
+
+    public void setOrderBy(SQLOrderBy orderBy) {
+        if (orderBy != null) {
+            orderBy.setParent(this);
+        }
+        
+        this.orderBy = orderBy;
+    }
 
     public int getDistionOption() {
         return this.distionOption;
@@ -80,16 +105,100 @@ public class SQLSelectQueryBlock extends SQLSelectQuery {
     public List<SQLSelectItem> getSelectList() {
         return this.selectList;
     }
+    
+    public void addSelectItem(SQLSelectItem item) {
+        this.selectList.add(item);
+        item.setParent(this);
+    }
 
     public SQLTableSource getFrom() {
         return this.from;
     }
 
     public void setFrom(SQLTableSource from) {
+        if (from != null) {
+            from.setParent(this);
+        }
         this.from = from;
     }
 
-    @Override
+    public boolean isParenthesized() {
+		return parenthesized;
+	}
+
+	public void setParenthesized(boolean parenthesized) {
+		this.parenthesized = parenthesized;
+	}
+	
+    public boolean isForUpdate() {
+        return forUpdate;
+    }
+
+    public void setForUpdate(boolean forUpdate) {
+        this.forUpdate = forUpdate;
+    }
+    
+    public boolean isNoWait() {
+        return noWait;
+    }
+
+    public void setNoWait(boolean noWait) {
+        this.noWait = noWait;
+    }
+    
+    public SQLExpr getWaitTime() {
+        return waitTime;
+    }
+    
+    public void setWaitTime(SQLExpr waitTime) {
+        if (waitTime != null) {
+            waitTime.setParent(this);
+        }
+        this.waitTime = waitTime;
+    }
+
+    public SQLLimit getLimit() {
+        return limit;
+    }
+
+    public void setLimit(SQLLimit limit) {
+        if (limit != null) {
+            limit.setParent(this);
+        }
+        this.limit = limit;
+    }
+
+    public SQLExpr getFirst() {
+        if (limit == null) {
+            return null;
+        }
+
+        return limit.getRowCount();
+    }
+
+    public void setFirst(SQLExpr first) {
+        if (limit == null) {
+            limit = new SQLLimit();
+        }
+        this.limit.setRowCount(first);
+    }
+
+    public SQLExpr getOffset() {
+        if (limit == null) {
+            return null;
+        }
+
+        return limit.getOffset();
+    }
+
+    public void setOffset(SQLExpr offset) {
+        if (limit == null) {
+            limit = new SQLLimit();
+        }
+        this.limit.setOffset(offset);
+    }
+
+	@Override
     protected void accept0(SQLASTVisitor visitor) {
         if (visitor.visit(this)) {
             acceptChild(visitor, this.selectList);
@@ -104,6 +213,7 @@ public class SQLSelectQueryBlock extends SQLSelectQuery {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
+        result = prime * result + (Boolean.valueOf(parenthesized).hashCode());
         result = prime * result + distionOption;
         result = prime * result + ((from == null) ? 0 : from.hashCode());
         result = prime * result + ((groupBy == null) ? 0 : groupBy.hashCode());
@@ -119,6 +229,7 @@ public class SQLSelectQueryBlock extends SQLSelectQuery {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         SQLSelectQueryBlock other = (SQLSelectQueryBlock) obj;
+        if (parenthesized ^ other.parenthesized) return false;
         if (distionOption != other.distionOption) return false;
         if (from == null) {
             if (other.from != null) return false;

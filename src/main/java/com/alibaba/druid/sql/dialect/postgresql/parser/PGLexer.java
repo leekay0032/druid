@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import java.util.Map;
 import com.alibaba.druid.sql.parser.Keywords;
 import com.alibaba.druid.sql.parser.Lexer;
 import com.alibaba.druid.sql.parser.Token;
+import com.alibaba.druid.util.JdbcConstants;
 
 public class PGLexer extends Lexer {
 
@@ -55,12 +56,17 @@ public class PGLexer extends Lexer {
         map.put("ROW", Token.ROW);
         map.put("ROWS", Token.ROWS);
         map.put("SHARE", Token.SHARE);
+        map.put("SHOW", Token.SHOW);
 
         map.put("USING", Token.USING);
         map.put("WINDOW", Token.WINDOW);
         
         map.put("TRUE", Token.TRUE);
         map.put("FALSE", Token.FALSE);
+        map.put("ARRAY", Token.ARRAY);
+        map.put("IF", Token.IF);
+        map.put("TYPE", Token.TYPE);
+        map.put("ILIKE", Token.ILIKE);
 
         DEFAULT_PG_KEYWORDS = new Keywords(map);
     }
@@ -68,6 +74,7 @@ public class PGLexer extends Lexer {
     public PGLexer(String input){
         super(input);
         super.keywods = DEFAULT_PG_KEYWORDS;
+        super.dbType = JdbcConstants.POSTGRESQL;
     }
     
     protected void scanString() {
@@ -90,6 +97,7 @@ public class PGLexer extends Lexer {
                     hasSpecial = true;
                 }
 
+                putChar('\\');
                 switch (ch) {
                     case '\0':
                         putChar('\0');
@@ -135,6 +143,7 @@ public class PGLexer extends Lexer {
                     arraycopy(mark + 1, buf, 0, bufPos);
                     hasSpecial = true;
                     putChar('\'');
+                    putChar('\'');
                     continue;
                 }
             }
@@ -155,6 +164,21 @@ public class PGLexer extends Lexer {
             stringVal = subString(mark + 1, bufPos);
         } else {
             stringVal = new String(buf, 0, bufPos);
+        }
+    }
+    
+    public void scanSharp() {
+        scanChar();
+        if (ch == '>') {
+            scanChar();
+            if (ch == '>') {
+                scanChar();
+                token = Token.POUNDGTGT;
+            } else {
+                token = Token.POUNDGT;
+            }
+        } else {
+            token = Token.POUND;
         }
     }
 }

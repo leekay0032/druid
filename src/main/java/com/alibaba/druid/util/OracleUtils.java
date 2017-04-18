@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -134,10 +134,9 @@ public class OracleUtils {
         oracleConn.setStatementCacheSize(size);
     }
 
-    @SuppressWarnings("deprecation")
     public static int pingDatabase(Connection conn) throws SQLException {
         OracleConnection oracleConn = unwrap(conn);
-        return oracleConn.pingDatabase(1000);
+        return oracleConn.pingDatabase();
     }
 
     public static void openProxySession(Connection conn, int type, java.util.Properties prop) throws SQLException {

@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ public class MonitorContext {
 
     public static String              DEFAULT_DOMAIN;
 
-    private final Map<String, Object> atrributes  = new HashMap<String, Object>();
+    private final Map<String, Object> attributes = new HashMap<String, Object>();
 
     private String                    domain  = "default";
     private String                    app     = "default";
@@ -54,8 +54,8 @@ public class MonitorContext {
         this.startTime = startTime;
     }
 
-    public Map<String, Object> getAtrributes() {
-        return atrributes;
+    public Map<String, Object> getAttributes() {
+        return attributes;
     }
 
     public int getPID() {

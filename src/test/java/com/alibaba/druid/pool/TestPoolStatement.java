@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ public class TestPoolStatement extends TestCase {
     protected void setUp() throws Exception {
 
         dataSource = new DruidDataSource();
-        dataSource.setUrl("jdbc:oracle:thin:@10.20.36.18:1521:testconn");
+        dataSource.setUrl("jdbc:oracle:thin:@a.b.c.d:1521:testconn");
         dataSource.setInitialSize(1);
         dataSource.setMaxActive(14);
         dataSource.setMaxIdle(14);

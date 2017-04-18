@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.alibaba.druid.sql.ast.statement.SQLUpdateStatement;
 import com.alibaba.druid.sql.dialect.postgresql.ast.PGWithClause;
 import com.alibaba.druid.sql.dialect.postgresql.visitor.PGASTVisitor;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
+import com.alibaba.druid.util.JdbcConstants;
 
 public class PGUpdateStatement extends SQLUpdateStatement implements PGSQLStatement {
 
@@ -31,16 +32,8 @@ public class PGUpdateStatement extends SQLUpdateStatement implements PGSQLStatem
 
     private PGWithClause   with;
 
-    private List<SQLExpr>  returning = new ArrayList<SQLExpr>(2);
-
-    private SQLTableSource from;
-
-    public SQLTableSource getFrom() {
-        return from;
-    }
-
-    public void setFrom(SQLTableSource from) {
-        this.from = from;
+    public PGUpdateStatement(){
+        super (JdbcConstants.POSTGRESQL);
     }
 
     public boolean isOnly() {
@@ -49,14 +42,6 @@ public class PGUpdateStatement extends SQLUpdateStatement implements PGSQLStatem
 
     public void setOnly(boolean only) {
         this.only = only;
-    }
-
-    public List<SQLExpr> getReturning() {
-        return returning;
-    }
-
-    public void setReturning(List<SQLExpr> returning) {
-        this.returning = returning;
     }
 
     public PGWithClause getWith() {

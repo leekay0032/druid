@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;
+import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlHintStatement;
 import com.alibaba.druid.sql.parser.Lexer;
 import com.alibaba.druid.sql.parser.NotAllowCommentException;
 import com.alibaba.druid.sql.parser.ParserException;
@@ -90,7 +91,7 @@ public abstract class WallProvider {
     protected final AtomicLong                            hardCheckCount          = new AtomicLong();
     protected final AtomicLong                            whiteListHitCount       = new AtomicLong();
     protected final AtomicLong                            blackListHitCount       = new AtomicLong();
-    protected final AtomicLong                            syntaxErrrorCount       = new AtomicLong();
+    protected final AtomicLong                            syntaxErrorCount        = new AtomicLong();
     protected final AtomicLong                            violationCount          = new AtomicLong();
     protected final AtomicLong                            violationEffectRowCount = new AtomicLong();
 
@@ -315,8 +316,7 @@ public abstract class WallProvider {
                                    Map<String, WallSqlFunctionStat> functionStats, List<Violation> violations,
                                    boolean syntaxError) {
         if (!blackListEnable) {
-            WallSqlStat stat = new WallSqlStat(tableStats, functionStats, violations, syntaxError);
-            return stat;
+            return new WallSqlStat(tableStats, functionStats, violations, syntaxError);
         }
 
         String mergedSql;
@@ -524,11 +524,8 @@ public abstract class WallProvider {
 
         functionName = functionName.toLowerCase();
 
-        if (getConfig().getDenyFunctions().contains(functionName)) {
-            return false;
-        }
+        return !getConfig().getDenyFunctions().contains(functionName);
 
-        return true;
     }
 
     public boolean checkDenySchema(String schemaName) {
@@ -541,11 +538,8 @@ public abstract class WallProvider {
         }
 
         schemaName = schemaName.toLowerCase();
-        if (getConfig().getDenySchemas().contains(schemaName)) {
-            return false;
-        }
+        return !getConfig().getDenySchemas().contains(schemaName);
 
-        return true;
     }
 
     public boolean checkDenyTable(String tableName) {
@@ -554,11 +548,8 @@ public abstract class WallProvider {
         }
 
         tableName = WallVisitorUtils.form(tableName);
-        if (getConfig().getDenyTables().contains(tableName)) {
-            return false;
-        }
+        return !getConfig().getDenyTables().contains(tableName);
 
-        return true;
     }
 
     public boolean checkReadOnlyTable(String tableName) {
@@ -567,11 +558,8 @@ public abstract class WallProvider {
         }
 
         tableName = WallVisitorUtils.form(tableName);
-        if (getConfig().isReadOnly(tableName)) {
-            return false;
-        }
+        return !getConfig().isReadOnly(tableName);
 
-        return true;
     }
 
     public WallDenyStat getCommentDenyStat() {
@@ -596,7 +584,7 @@ public abstract class WallProvider {
 
         WallContext context = WallContext.current();
 
-        if (config.isDoPrivilegedAllow() && ispPivileged()) {
+        if (config.isDoPrivilegedAllow() && ispPrivileged()) {
             WallCheckResult checkResult = new WallCheckResult();
             checkResult.setSql(sql);
             return checkResult;
@@ -616,6 +604,7 @@ public abstract class WallProvider {
         final List<Violation> violations = new ArrayList<Violation>();
         List<SQLStatement> statementList = new ArrayList<SQLStatement>();
         boolean syntaxError = false;
+        boolean endOfComment = false;
         try {
             SQLStatementParser parser = createParser(sql);
             parser.getLexer().setCommentHandler(WallCommentHandler.instance);
@@ -623,19 +612,24 @@ public abstract class WallProvider {
             if (!config.isCommentAllow()) {
                 parser.getLexer().setAllowComment(false); // deny comment
             }
-
+            if (!config.isCompleteInsertValuesCheck()) {
+                parser.setParseCompleteValues(false);
+                parser.setParseValuesSize(config.getInsertValuesCheckSize());
+            }
+            
             parser.parseStatementList(statementList);
 
             final Token lastToken = parser.getLexer().token();
-            if (lastToken != Token.EOF) {
+            if (lastToken != Token.EOF && config.isStrictSyntaxCheck()) {
                 violations.add(new IllegalSQLObjectViolation(ErrorCode.SYNTAX_ERROR, "not terminal sql, token "
                                                                                      + lastToken, sql));
             }
+            endOfComment = parser.getLexer().isEndOfComment();
         } catch (NotAllowCommentException e) {
             violations.add(new IllegalSQLObjectViolation(ErrorCode.COMMENT_STATEMENT_NOT_ALLOW, "comment not allow", sql));
             incrementCommentDeniedCount();
         } catch (ParserException e) {
-            syntaxErrrorCount.incrementAndGet();
+            syntaxErrorCount.incrementAndGet();
             syntaxError = true;
             if (config.isStrictSyntaxCheck()) {
                 violations.add(new SyntaxErrorViolation(e, sql));
@@ -651,9 +645,16 @@ public abstract class WallProvider {
         }
 
         WallVisitor visitor = createWallVisitor();
+        visitor.setSqlEndOfComment(endOfComment);
 
         if (statementList.size() > 0) {
-            for (SQLStatement stmt : statementList) {
+            boolean lastIsHint = false;
+            for (int i=0; i<statementList.size(); i++) {
+                SQLStatement stmt = statementList.get(i);
+                if ((i == 0 || lastIsHint) && stmt instanceof MySqlHintStatement) {
+                    lastIsHint = true;
+                    continue;
+                }
                 try {
                     stmt.accept(visitor);
                 } catch (ParserException e) {
@@ -665,16 +666,6 @@ public abstract class WallProvider {
         if (visitor.getViolations().size() > 0) {
             violations.addAll(visitor.getViolations());
         }
-
-        // if (visitor.getViolations().size() == 0 && context != null && context.getWarnnings() >= 2) {
-        // if (context.getCommentCount() > 0) {
-        // violations.add(new IllegalSQLObjectViolation(ErrorCode.COMMIT_NOT_ALLOW, "comment not allow", sql));
-        // } else if (context.getLikeNumberWarnnings() > 0) {
-        // violations.add(new IllegalSQLObjectViolation(ErrorCode.COMMIT_NOT_ALLOW, "like number", sql));
-        // } else {
-        // violations.add(new IllegalSQLObjectViolation(ErrorCode.COMPOUND, "multi-warnnings", sql));
-        // }
-        // }
 
         WallSqlStat sqlStat = null;
         if (violations.size() > 0) {
@@ -702,7 +693,7 @@ public abstract class WallProvider {
             context.setSqlStat(sqlStat);
             result = new WallCheckResult(sqlStat, statementList);
         } else {
-            result = new WallCheckResult(sqlStat, violations, tableStats, functionStats, statementList, syntaxError);
+            result = new WallCheckResult(null, violations, tableStats, functionStats, statementList, syntaxError);
         }
 
         String resultSql;
@@ -725,7 +716,7 @@ public abstract class WallProvider {
                 violationCount.incrementAndGet();
 
                 if (sqlStat.isSyntaxError()) {
-                    syntaxErrrorCount.incrementAndGet();
+                    syntaxErrorCount.incrementAndGet();
                 }
 
                 sqlStat.incrementAndGetExecuteCount();
@@ -742,7 +733,7 @@ public abstract class WallProvider {
                 sqlStat.incrementAndGetExecuteCount();
 
                 if (sqlStat.isSyntaxError()) {
-                    syntaxErrrorCount.incrementAndGet();
+                    syntaxErrorCount.incrementAndGet();
                 }
 
                 recordStats(sqlStat.getTableStats(), sqlStat.getFunctionStats());
@@ -780,13 +771,13 @@ public abstract class WallProvider {
         }
     }
 
-    public static boolean ispPivileged() {
+    public static boolean ispPrivileged() {
         Boolean value = privileged.get();
         if (value == null) {
             return false;
         }
 
-        return value.booleanValue();
+        return value;
     }
 
     public static <T> T doPrivileged(PrivilegedAction<T> action) {
@@ -818,7 +809,7 @@ public abstract class WallProvider {
     }
 
     public long getSyntaxErrorCount() {
-        return syntaxErrrorCount.get();
+        return syntaxErrorCount.get();
     }
 
     public long getCheckCount() {
@@ -887,7 +878,7 @@ public abstract class WallProvider {
         statValue.setViolationEffectRowCount(get(violationEffectRowCount, reset));
         statValue.setBlackListHitCount(get(blackListHitCount, reset));
         statValue.setWhiteListHitCount(get(whiteListHitCount, reset));
-        statValue.setSyntaxErrorCount(get(syntaxErrrorCount, reset));
+        statValue.setSyntaxErrorCount(get(syntaxErrorCount, reset));
 
         for (Map.Entry<String, WallTableStat> entry : this.tableStats.entrySet()) {
             String tableName = entry.getKey();

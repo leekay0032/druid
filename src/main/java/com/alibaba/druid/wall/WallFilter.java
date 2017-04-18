@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,28 @@
  */
 package com.alibaba.druid.wall;
 
-import static com.alibaba.druid.util.Utils.getBoolean;
+import com.alibaba.druid.filter.FilterAdapter;
+import com.alibaba.druid.filter.FilterChain;
+import com.alibaba.druid.proxy.jdbc.CallableStatementProxy;
+import com.alibaba.druid.proxy.jdbc.ConnectionProxy;
+import com.alibaba.druid.proxy.jdbc.DataSourceProxy;
+import com.alibaba.druid.proxy.jdbc.PreparedStatementProxy;
+import com.alibaba.druid.proxy.jdbc.ResultSetMetaDataProxy;
+import com.alibaba.druid.proxy.jdbc.ResultSetProxy;
+import com.alibaba.druid.proxy.jdbc.StatementProxy;
+import com.alibaba.druid.support.logging.Log;
+import com.alibaba.druid.support.logging.LogFactory;
+import com.alibaba.druid.util.JdbcUtils;
+import com.alibaba.druid.util.ServletPathMatcher;
+import com.alibaba.druid.util.StringUtils;
+import com.alibaba.druid.wall.WallConfig.TenantCallBack;
+import com.alibaba.druid.wall.WallConfig.TenantCallBack.StatementType;
+import com.alibaba.druid.wall.spi.DB2WallProvider;
+import com.alibaba.druid.wall.spi.MySqlWallProvider;
+import com.alibaba.druid.wall.spi.OracleWallProvider;
+import com.alibaba.druid.wall.spi.PGWallProvider;
+import com.alibaba.druid.wall.spi.SQLServerWallProvider;
+import com.alibaba.druid.wall.violation.SyntaxErrorViolation;
 
 import java.io.InputStream;
 import java.io.Reader;
@@ -40,28 +61,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import com.alibaba.druid.filter.FilterAdapter;
-import com.alibaba.druid.filter.FilterChain;
-import com.alibaba.druid.proxy.jdbc.CallableStatementProxy;
-import com.alibaba.druid.proxy.jdbc.ConnectionProxy;
-import com.alibaba.druid.proxy.jdbc.DataSourceProxy;
-import com.alibaba.druid.proxy.jdbc.PreparedStatementProxy;
-import com.alibaba.druid.proxy.jdbc.ResultSetMetaDataProxy;
-import com.alibaba.druid.proxy.jdbc.ResultSetProxy;
-import com.alibaba.druid.proxy.jdbc.StatementProxy;
-import com.alibaba.druid.support.logging.Log;
-import com.alibaba.druid.support.logging.LogFactory;
-import com.alibaba.druid.util.JdbcUtils;
-import com.alibaba.druid.util.ServletPathMatcher;
-import com.alibaba.druid.util.StringUtils;
-import com.alibaba.druid.wall.WallConfig.TenantCallBack;
-import com.alibaba.druid.wall.WallConfig.TenantCallBack.StatementType;
-import com.alibaba.druid.wall.spi.DB2WallProvider;
-import com.alibaba.druid.wall.spi.MySqlWallProvider;
-import com.alibaba.druid.wall.spi.OracleWallProvider;
-import com.alibaba.druid.wall.spi.PGWallProvider;
-import com.alibaba.druid.wall.spi.SQLServerWallProvider;
-import com.alibaba.druid.wall.violation.SyntaxErrorViolation;
+import static com.alibaba.druid.util.Utils.getBoolean;
 
 public class WallFilter extends FilterAdapter implements WallFilterMBean {
 
@@ -98,12 +98,22 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
                 this.throwException = value;
             }
         }
+        
+        if (this.config != null) {
+            this.config.configFromProperties(properties);
+        }
     }
 
     @Override
     public synchronized void init(DataSourceProxy dataSource) {
+
+        if (null == dataSource) {
+            LOG.error("dataSource should not be null");
+            return;
+        }
+
         if (this.dbType == null || this.dbType.trim().length() == 0) {
-            if (dataSource != null && dataSource.getDbType() != null) {
+            if (dataSource.getDbType() != null) {
                 this.dbType = dataSource.getDbType();
             } else {
                 this.dbType = JdbcUtils.getDbType(dataSource.getRawJdbcUrl(), "");
@@ -134,7 +144,8 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
             }
 
             provider = new SQLServerWallProvider(config);
-        } else if (JdbcUtils.POSTGRESQL.equals(dbType)) {
+        } else if (JdbcUtils.POSTGRESQL.equals(dbType)
+                || JdbcUtils.ENTERPRISEDB.equals(dbType)) {
             if (config == null) {
                 config = new WallConfig(PGWallProvider.DEFAULT_CONFIG_DIR);
             }
@@ -149,7 +160,7 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
         } else {
             throw new IllegalStateException("dbType not support : " + dbType + ", url " + dataSource.getUrl());
         }
-
+        
         provider.setName(dataSource.getName());
 
         this.inited = true;
@@ -203,6 +214,14 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
 
     public void setConfig(WallConfig config) {
         this.config = config;
+    }
+    
+    public void setTenantColumn(String tenantColumn) {
+        this.config.setTenantColumn(tenantColumn);
+    }
+    
+    public String getTenantColumn() {
+        return this.config.getTenantColumn();
     }
 
     public boolean isInited() {
@@ -466,8 +485,8 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
         try {
             int[] updateCounts = chain.statement_executeBatch(statement);
             int updateCount = 0;
-            for (int i = 0; i < updateCounts.length; ++i) {
-                updateCount += updateCounts[i];
+            for (int count : updateCounts) {
+                updateCount += count;
             }
 
             if (sqlStat != null) {
@@ -556,8 +575,7 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
 
     private WallContext createWallContext(StatementProxy statement) {
         String dbType = getDbType(statement);
-        WallContext context = WallContext.create(dbType);
-        return context;
+        return WallContext.create(dbType);
     }
 
     @Override
@@ -664,7 +682,7 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
             return;
         }
 
-        if (updateCount > 0 && sqlStat != null) {
+        if (updateCount > 0) {
             provider.addUpdateCount(sqlStat, updateCount);
         }
     }
@@ -711,25 +729,21 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
             }
         }
 
-        String resultSql = checkResult.getSql();
-        return resultSql;
+        return checkResult.getSql();
     }
 
     @Override
     public boolean isWrapperFor(FilterChain chain, Wrapper wrapper, Class<?> iface) throws SQLException {
-        if (config.isDoPrivilegedAllow() && WallProvider.ispPivileged()) {
+        if (config.isDoPrivilegedAllow() && WallProvider.ispPrivileged()) {
             return chain.isWrapperFor(wrapper, iface);
         }
 
-        if (!this.provider.getConfig().isWrapAllow()) {
-            return false;
-        }
-        return chain.isWrapperFor(wrapper, iface);
+        return this.provider.getConfig().isWrapAllow() && chain.isWrapperFor(wrapper, iface);
     }
 
     @Override
     public <T> T unwrap(FilterChain chain, Wrapper wrapper, Class<T> iface) throws SQLException {
-        if (config.isDoPrivilegedAllow() && WallProvider.ispPivileged()) {
+        if (config.isDoPrivilegedAllow() && WallProvider.ispPrivileged()) {
             return chain.unwrap(wrapper, iface);
         }
 
@@ -742,19 +756,17 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
 
     @Override
     public DatabaseMetaData connection_getMetaData(FilterChain chain, ConnectionProxy connection) throws SQLException {
-        if (config.isDoPrivilegedAllow() && WallProvider.ispPivileged()) {
+        if (config.isDoPrivilegedAllow() && WallProvider.ispPrivileged()) {
             return chain.connection_getMetaData(connection);
         }
 
         if (!this.provider.getConfig().isMetadataAllow()) {
             if (isLogViolation()) {
-                LOG.error("not support method : Connection.getMetdataData");
+                LOG.error("not support method : Connection.getMetaData");
             }
 
             if (throwException) {
-                throw new WallSQLException("not support method : Connection.getMetdataData");
-            } else {
-
+                throw new WallSQLException("not support method : Connection.getMetaData");
             }
         }
 
@@ -1419,7 +1431,7 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
 
             if (!StringUtils.isEmpty(hiddenColumn)) {
                 String columnName = metaData.getColumnName(physicalColumn);
-                if (hiddenColumn.equalsIgnoreCase(columnName)) {
+                if (null != hiddenColumn && hiddenColumn.equalsIgnoreCase(columnName)) {
                     hiddenColumns.add(physicalColumn);
                     isHidden = true;
                 }
@@ -1431,7 +1443,7 @@ public class WallFilter extends FilterAdapter implements WallFilterMBean {
             }
 
             if (!StringUtils.isEmpty(tenantColumn)
-                && tenantColumn.equalsIgnoreCase(metaData.getColumnName(physicalColumn))) {
+                && null != tenantColumn && tenantColumn.equalsIgnoreCase(metaData.getColumnName(physicalColumn))) {
                 tenantColumns.add(physicalColumn);
             }
         }

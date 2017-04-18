@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 package com.alibaba.druid.wall.spi;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLName;
@@ -51,12 +48,16 @@ import com.alibaba.druid.wall.WallVisitor;
 import com.alibaba.druid.wall.violation.ErrorCode;
 import com.alibaba.druid.wall.violation.IllegalSQLObjectViolation;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class DB2WallVisitor extends DB2ASTVisitorAdapter implements WallVisitor {
 
     private final WallConfig      config;
     private final WallProvider    provider;
-    private final List<Violation> violations  = new ArrayList<Violation>();
-    private boolean               sqlModified = false;
+    private final List<Violation> violations      = new ArrayList<Violation>();
+    private boolean               sqlModified     = false;
+    private boolean               sqlEndOfComment = false;
 
     public DB2WallVisitor(WallProvider provider){
         this.config = provider.getConfig();
@@ -273,5 +274,15 @@ public class DB2WallVisitor extends DB2ASTVisitorAdapter implements WallVisitor 
     @Override
     public boolean visit(SQLCreateTriggerStatement x) {
         return false;
+    }
+    
+    @Override
+    public boolean isSqlEndOfComment() {
+        return this.sqlEndOfComment;
+    }
+
+    @Override
+    public void setSqlEndOfComment(boolean sqlEndOfComment) {
+        this.sqlEndOfComment = sqlEndOfComment;
     }
 }

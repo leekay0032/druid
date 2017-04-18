@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,10 @@
  */
 package com.alibaba.druid.util;
 
+import com.alibaba.druid.support.logging.Log;
+import com.alibaba.druid.support.logging.LogFactory;
+
+import javax.sql.DataSource;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -37,19 +41,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import javax.sql.DataSource;
-
-import com.alibaba.druid.support.logging.Log;
-import com.alibaba.druid.support.logging.LogFactory;
-
 /**
- * @author wenshao<szujobs@hotmail.com>
+ * @author wenshao [szujobs@hotmail.com]
  */
 public final class JdbcUtils implements JdbcConstants {
 
-    private final static Log        LOG              = LogFactory.getLog(JdbcUtils.class);
+    private final static Log        LOG                = LogFactory.getLog(JdbcUtils.class);
 
-    private static final Properties driverUrlMapping = new Properties();
+    private static final Properties DRIVER_URL_MAPPING = new Properties();
+
+    private static Boolean mysql_driver_version_6      = null;
 
     static {
         try {
@@ -68,7 +69,7 @@ public final class JdbcUtils implements JdbcConstants {
                         JdbcUtils.close(is);
                     }
 
-                    driverUrlMapping.putAll(property);
+                    DRIVER_URL_MAPPING.putAll(property);
                 }
             }
         } catch (Exception e) {
@@ -76,7 +77,7 @@ public final class JdbcUtils implements JdbcConstants {
         }
     }
 
-    public final static void close(Connection x) {
+    public static void close(Connection x) {
         if (x == null) {
             return;
         }
@@ -87,7 +88,7 @@ public final class JdbcUtils implements JdbcConstants {
         }
     }
 
-    public final static void close(Statement x) {
+    public static void close(Statement x) {
         if (x == null) {
             return;
         }
@@ -98,18 +99,18 @@ public final class JdbcUtils implements JdbcConstants {
         }
     }
 
-    public final static void close(ResultSet x) {
+    public static void close(ResultSet x) {
         if (x == null) {
             return;
         }
         try {
             x.close();
         } catch (Exception e) {
-            LOG.debug("close resultset error", e);
+            LOG.debug("close result set error", e);
         }
     }
 
-    public final static void close(Closeable x) {
+    public static void close(Closeable x) {
         if (x == null) {
             return;
         }
@@ -121,18 +122,24 @@ public final class JdbcUtils implements JdbcConstants {
         }
     }
 
-    public final static void printResultSet(ResultSet rs) throws SQLException {
+    public static void printResultSet(ResultSet rs) throws SQLException {
         printResultSet(rs, System.out);
     }
+    
+    public static void printResultSet(ResultSet rs, PrintStream out) throws SQLException {
+        printResultSet(rs, out, true, "\t");
+    }
 
-    public final static void printResultSet(ResultSet rs, PrintStream out) throws SQLException {
+    public static void printResultSet(ResultSet rs, PrintStream out, boolean printHeader, String seperator) throws SQLException {
         ResultSetMetaData metadata = rs.getMetaData();
         int columnCount = metadata.getColumnCount();
-        for (int columnIndex = 1; columnIndex <= columnCount; ++columnIndex) {
-            if (columnIndex != 1) {
-                out.print('\t');
+        if (printHeader) {
+            for (int columnIndex = 1; columnIndex <= columnCount; ++columnIndex) {
+                if (columnIndex != 1) {
+                    out.print(seperator);
+                }
+                out.print(metadata.getColumnName(columnIndex));
             }
-            out.print(metadata.getColumnName(columnIndex));
         }
 
         out.println();
@@ -141,7 +148,7 @@ public final class JdbcUtils implements JdbcConstants {
 
             for (int columnIndex = 1; columnIndex <= columnCount; ++columnIndex) {
                 if (columnIndex != 1) {
-                    out.print('\t');
+                    out.print(seperator);
                 }
 
                 int type = metadata.getColumnType(columnIndex);
@@ -204,35 +211,35 @@ public final class JdbcUtils implements JdbcConstants {
                 } else if (type == Types.CLOB) {
                     out.print(String.valueOf(rs.getString(columnIndex)));
                 } else if (type == Types.JAVA_OBJECT) {
-                    Object objec = rs.getObject(columnIndex);
+                    Object object = rs.getObject(columnIndex);
 
                     if (rs.wasNull()) {
                         out.print("null");
                     } else {
-                        out.print(String.valueOf(objec));
+                        out.print(String.valueOf(object));
                     }
                 } else if (type == Types.LONGVARCHAR) {
-                    Object objec = rs.getString(columnIndex);
+                    Object object = rs.getString(columnIndex);
 
                     if (rs.wasNull()) {
                         out.print("null");
                     } else {
-                        out.print(String.valueOf(objec));
+                        out.print(String.valueOf(object));
                     }
                 } else if (type == Types.NULL) {
                     out.print("null");
                 } else {
-                    Object objec = rs.getObject(columnIndex);
+                    Object object = rs.getObject(columnIndex);
 
                     if (rs.wasNull()) {
                         out.print("null");
                     } else {
-                        if (objec instanceof byte[]) {
-                            byte[] bytes = (byte[]) objec;
+                        if (object instanceof byte[]) {
+                            byte[] bytes = (byte[]) object;
                             String text = HexBin.encode(bytes);
                             out.print(text);
                         } else {
-                            out.print(String.valueOf(objec));
+                            out.print(String.valueOf(object));
                         }
                     }
                 }
@@ -352,17 +359,28 @@ public final class JdbcUtils implements JdbcConstants {
     }
 
     public static String getDriverClassName(String rawUrl) throws SQLException {
+        if (rawUrl == null) {
+            return null;
+        }
+        
         if (rawUrl.startsWith("jdbc:derby:")) {
             return "org.apache.derby.jdbc.EmbeddedDriver";
         } else if (rawUrl.startsWith("jdbc:mysql:")) {
-            return MYSQL_DRIVER;
+            if (mysql_driver_version_6 == null) {
+                mysql_driver_version_6 = Utils.loadClass("com.mysql.cj.jdbc.Driver") != null;
+            }
+
+            if (mysql_driver_version_6) {
+                return MYSQL_DRIVER_6;
+            } else {
+                return MYSQL_DRIVER;
+            }
         } else if (rawUrl.startsWith("jdbc:log4jdbc:")) {
             return LOG4JDBC_DRIVER;
         } else if (rawUrl.startsWith("jdbc:mariadb:")) {
             return MARIADB_DRIVER;
         } else if (rawUrl.startsWith("jdbc:oracle:") //
-                || rawUrl.startsWith("JDBC:oracle:")
-                ) {
+                   || rawUrl.startsWith("JDBC:oracle:")) {
             return ORACLE_DRIVER;
         } else if (rawUrl.startsWith("jdbc:alibaba:oracle:")) {
             return ALI_ORACLE_DRIVER;
@@ -377,13 +395,17 @@ public final class JdbcUtils implements JdbcConstants {
         } else if (rawUrl.startsWith("jdbc:fake:") || rawUrl.startsWith("jdbc:mock:")) {
             return "com.alibaba.druid.mock.MockDriver";
         } else if (rawUrl.startsWith("jdbc:postgresql:")) {
-            return "org.postgresql.Driver";
+            return POSTGRESQL_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:edb:")) {
+            return ENTERPRISEDB_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:odps:")) {
+            return ODPS_DRIVER;
         } else if (rawUrl.startsWith("jdbc:hsqldb:")) {
             return "org.hsqldb.jdbcDriver";
         } else if (rawUrl.startsWith("jdbc:db2:")) {
             return DB2_DRIVER;
         } else if (rawUrl.startsWith("jdbc:sqlite:")) {
-            return "org.sqlite.JDBC";
+            return SQLITE_DRIVER;
         } else if (rawUrl.startsWith("jdbc:ingres:")) {
             return "com.ingres.jdbc.IngresDriver";
         } else if (rawUrl.startsWith("jdbc:h2:")) {
@@ -414,6 +436,18 @@ public final class JdbcUtils implements JdbcConstants {
             return "ca.edbc.jdbc.EdbcDriver";
         } else if (rawUrl.startsWith("jdbc:mimer:multi1:")) {
             return "com.mimer.jdbc.Driver";
+        } else if (rawUrl.startsWith("jdbc:dm:")) {
+            return JdbcConstants.DM_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:kingbase:")) {
+            return JdbcConstants.KINGBASE_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:hive:")) {
+            return JdbcConstants.HIVE_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:hive2:")) {
+            return JdbcConstants.HIVE_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:phoenix:thin:")) {
+            return "org.apache.phoenix.queryserver.client.Driver";
+        } else if (rawUrl.startsWith("jdbc:phoenix://")) {
+            return JdbcConstants.PHOENIX_DRIVER;
         } else {
             throw new SQLException("unkow jdbc driver : " + rawUrl);
         }
@@ -424,45 +458,48 @@ public final class JdbcUtils implements JdbcConstants {
             return null;
         }
 
-        if (rawUrl.startsWith("jdbc:derby:")) {
+        if (rawUrl.startsWith("jdbc:derby:") || rawUrl.startsWith("jdbc:log4jdbc:derby:")) {
             return DERBY;
-        } else if (rawUrl.startsWith("jdbc:mysql:")) {
+        } else if (rawUrl.startsWith("jdbc:mysql:") || rawUrl.startsWith("jdbc:cobar:")
+                   || rawUrl.startsWith("jdbc:log4jdbc:mysql:")) {
             return MYSQL;
-        } else if (rawUrl.startsWith("jdbc:log4jdbc:")) {
-            return LOG4JDBC;
         } else if (rawUrl.startsWith("jdbc:mariadb:")) {
             return MARIADB;
-        } else if (rawUrl.startsWith("jdbc:oracle:")) {
+        } else if (rawUrl.startsWith("jdbc:oracle:") || rawUrl.startsWith("jdbc:log4jdbc:oracle:")) {
             return ORACLE;
         } else if (rawUrl.startsWith("jdbc:alibaba:oracle:")) {
             return ALI_ORACLE;
-        } else if (rawUrl.startsWith("jdbc:microsoft:")) {
+        } else if (rawUrl.startsWith("jdbc:microsoft:") || rawUrl.startsWith("jdbc:log4jdbc:microsoft:")) {
             return SQL_SERVER;
-        } else if (rawUrl.startsWith("jdbc:sqlserver:")) {
+        } else if (rawUrl.startsWith("jdbc:sqlserver:") || rawUrl.startsWith("jdbc:log4jdbc:sqlserver:")) {
             return SQL_SERVER;
-        } else if (rawUrl.startsWith("jdbc:sybase:Tds:")) {
+        } else if (rawUrl.startsWith("jdbc:sybase:Tds:") || rawUrl.startsWith("jdbc:log4jdbc:sybase:")) {
             return SYBASE;
-        } else if (rawUrl.startsWith("jdbc:jtds:")) {
+        } else if (rawUrl.startsWith("jdbc:jtds:") || rawUrl.startsWith("jdbc:log4jdbc:jtds:")) {
             return JTDS;
         } else if (rawUrl.startsWith("jdbc:fake:") || rawUrl.startsWith("jdbc:mock:")) {
             return MOCK;
-        } else if (rawUrl.startsWith("jdbc:postgresql:")) {
+        } else if (rawUrl.startsWith("jdbc:postgresql:") || rawUrl.startsWith("jdbc:log4jdbc:postgresql:")) {
             return POSTGRESQL;
-        } else if (rawUrl.startsWith("jdbc:hsqldb:")) {
+        } else if (rawUrl.startsWith("jdbc:edb:")) {
+            return ENTERPRISEDB;
+        } else if (rawUrl.startsWith("jdbc:hsqldb:") || rawUrl.startsWith("jdbc:log4jdbc:hsqldb:")) {
             return HSQL;
+        } else if (rawUrl.startsWith("jdbc:odps:")) {
+            return ODPS;
         } else if (rawUrl.startsWith("jdbc:db2:")) {
             return DB2;
         } else if (rawUrl.startsWith("jdbc:sqlite:")) {
-            return "sqlite";
+            return SQLITE;
         } else if (rawUrl.startsWith("jdbc:ingres:")) {
             return "ingres";
-        } else if (rawUrl.startsWith("jdbc:h2:")) {
+        } else if (rawUrl.startsWith("jdbc:h2:") || rawUrl.startsWith("jdbc:log4jdbc:h2:")) {
             return H2;
         } else if (rawUrl.startsWith("jdbc:mckoi:")) {
             return "mckoi";
         } else if (rawUrl.startsWith("jdbc:cloudscape:")) {
             return "cloudscape";
-        } else if (rawUrl.startsWith("jdbc:informix-sqli:")) {
+        } else if (rawUrl.startsWith("jdbc:informix-sqli:") || rawUrl.startsWith("jdbc:log4jdbc:informix-sqli:")) {
             return "informix";
         } else if (rawUrl.startsWith("jdbc:timesten:")) {
             return "timesten";
@@ -484,6 +521,18 @@ public final class JdbcUtils implements JdbcConstants {
             return "edbc";
         } else if (rawUrl.startsWith("jdbc:mimer:multi1:")) {
             return "mimer";
+        } else if (rawUrl.startsWith("jdbc:dm:")) {
+            return JdbcConstants.DM;
+        } else if (rawUrl.startsWith("jdbc:kingbase:")) {
+            return JdbcConstants.KINGBASE;
+        } else if (rawUrl.startsWith("jdbc:log4jdbc:")) {
+            return LOG4JDBC;
+        } else if (rawUrl.startsWith("jdbc:hive:")) {
+            return HIVE;
+        } else if (rawUrl.startsWith("jdbc:hive2:")) {
+            return HIVE;
+        } else if (rawUrl.startsWith("jdbc:phoenix:")) {
+            return PHOENIX;
         } else {
             return null;
         }

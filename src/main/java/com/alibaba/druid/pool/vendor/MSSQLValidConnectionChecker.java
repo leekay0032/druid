@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,6 @@ import java.sql.Statement;
 
 import com.alibaba.druid.pool.ValidConnectionChecker;
 import com.alibaba.druid.pool.ValidConnectionCheckerAdapter;
-import com.alibaba.druid.support.logging.Log;
-import com.alibaba.druid.support.logging.LogFactory;
 import com.alibaba.druid.util.JdbcUtils;
 
 /**
@@ -33,19 +31,12 @@ public class MSSQLValidConnectionChecker extends ValidConnectionCheckerAdapter i
 
     private static final long serialVersionUID = 1L;
 
-    private static final Log  LOG              = LogFactory.getLog(MSSQLValidConnectionChecker.class);
-
     public MSSQLValidConnectionChecker(){
 
     }
 
-    public boolean isValidConnection(final Connection c, String valiateQuery, int validationQueryTimeout) {
-        try {
-            if (c.isClosed()) {
-                return false;
-            }
-        } catch (SQLException ex) {
-            // skip
+    public boolean isValidConnection(final Connection c, String validateQuery, int validationQueryTimeout) throws Exception {
+        if (c.isClosed()) {
             return false;
         }
 
@@ -54,13 +45,10 @@ public class MSSQLValidConnectionChecker extends ValidConnectionCheckerAdapter i
         try {
             stmt = c.createStatement();
             stmt.setQueryTimeout(validationQueryTimeout);
-            stmt.execute(valiateQuery);
+            stmt.execute(validateQuery);
             return true;
         } catch (SQLException e) {
-            if (LOG.isWarnEnabled()) {
-                LOG.warn("warning: connection validation failed for current managed connection.");
-            }
-            return false;
+            throw e;
         } finally {
             JdbcUtils.close(stmt);
         }

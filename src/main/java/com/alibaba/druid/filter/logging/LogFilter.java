@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,13 +35,15 @@ import com.alibaba.druid.proxy.jdbc.PreparedStatementProxy;
 import com.alibaba.druid.proxy.jdbc.ResultSetProxy;
 import com.alibaba.druid.proxy.jdbc.StatementProxy;
 import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.druid.sql.SQLUtils.FormatOption;
 import com.alibaba.druid.util.JdbcUtils;
 
+import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+
 /**
- * @author wenshao<szujobs@hotmail.com>
+ * @author wenshao [szujobs@hotmail.com]
  */
 public abstract class LogFilter extends FilterEventAdapter implements LogFilterMBean {
-
     protected String          dataSourceLoggerName                 = "druid.sql.DataSource";
     protected String          connectionLoggerName                 = "druid.sql.Connection";
     protected String          statementLoggerName                  = "druid.sql.Statement";
@@ -79,6 +81,9 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
     private boolean           statementLogErrorEnabled             = true;
     private boolean           resultSetLogEnabled                  = true;
     private boolean           resultSetLogErrorEnabled             = true;
+
+    private FormatOption      statementSqlFormatOption             = new FormatOption(false, true);
+    private boolean           statementLogSqlPrettyFormat          = false;
 
     protected DataSourceProxy dataSource;
 
@@ -334,6 +339,22 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
         this.statementParameterClearLogEnable = statementParameterClearLogEnable;
     }
 
+    public FormatOption getStatementSqlFormatOption() {
+        return this.statementSqlFormatOption;
+    }
+
+    public void setStatementSqlFormatOption(FormatOption formatOption) {
+        this.statementSqlFormatOption = formatOption;
+    }
+
+    public boolean isStatementSqlPrettyFormat() {
+        return this.statementLogSqlPrettyFormat;
+    }
+
+    public void setStatementSqlPrettyFormat(boolean statementSqlPrettyFormat) {
+        this.statementLogSqlPrettyFormat = statementSqlPrettyFormat;
+    }
+
     protected abstract void connectionLog(String message);
 
     protected abstract void statementLog(String message);
@@ -345,6 +366,10 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
     protected abstract void resultSetLogError(String message, Throwable error);
 
     public void connection_connectAfter(ConnectionProxy connection) {
+        if (connection == null) {
+            return;
+        }
+        
         if (connectionConnectAfterLogEnable && isConnectionLogEnabled()) {
             connectionLog("{conn-" + connection.getId() + "} connected");
         }
@@ -356,7 +381,7 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
         Savepoint savepoint = chain.connection_setSavepoint(connection);
 
         if (isConnectionLogEnabled()) {
-            connectionLog("{conn " + connection.getId() + "} setSavepoint-" + savepoint.getSavepointId());
+            connectionLog("{conn " + connection.getId() + "} setSavepoint-" + savepointToString(savepoint));
         }
 
         return savepoint;
@@ -389,7 +414,7 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
         super.connection_rollback(chain, connection, savePoint);
 
         if (connectionRollbackAfterLogEnable && isConnectionLogEnabled()) {
-            connectionLog("{conn " + connection.getId() + "} rollback -> " + savePoint.getSavepointId());
+            connectionLog("{conn " + connection.getId() + "} rollback -> " + savepointToString(savePoint));
         }
     }
 
@@ -535,11 +560,13 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
         List<Object> parameters = new ArrayList<Object>(parametersSize);
         for (int i = 0; i < parametersSize; ++i) {
             JdbcParameter jdbcParam = statement.getParameter(i);
-            parameters.add(jdbcParam.getValue());
+            parameters.add(jdbcParam != null
+                    ? jdbcParam.getValue()
+                    : null);
         }
 
         String dbType = statement.getConnectionProxy().getDirectDataSource().getDbType();
-        String formattedSql = SQLUtils.format(sql, dbType, parameters);
+        String formattedSql = SQLUtils.format(sql, dbType, parameters, this.statementSqlFormatOption);
         statementLog("{conn-" + statement.getConnectionProxy().getId() + ", " + stmtId(statement) + "} executed. "
                      + formattedSql);
     }
@@ -723,8 +750,28 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
     @Override
     protected void statement_executeErrorAfter(StatementProxy statement, String sql, Throwable error) {
         if (this.isStatementLogErrorEnabled()) {
-            statementLogError("{conn-" + statement.getConnectionProxy().getId() + ", " + stmtId(statement)
+	    if (!isStatementExecutableSqlLogEnable()) {
+        		statementLogError("{conn-" + statement.getConnectionProxy().getId() + ", " + stmtId(statement)
                               + "} execute error. " + sql, error);
+            }else{
+            	int parametersSize = statement.getParametersSize();
+            	if (parametersSize > 0) {
+            		List<Object> parameters = new ArrayList<Object>(parametersSize);
+            		for (int i = 0; i < parametersSize; ++i) {
+            			JdbcParameter jdbcParam = statement.getParameter(i);
+            			parameters.add(jdbcParam != null
+            					? jdbcParam.getValue()
+            							: null);
+            		}
+            		String dbType = statement.getConnectionProxy().getDirectDataSource().getDbType();
+            		String formattedSql = SQLUtils.format(sql, dbType, parameters, this.statementSqlFormatOption);
+			statementLogError("{conn-" + statement.getConnectionProxy().getId() + ", " + stmtId(statement)
+                              + "} execute error. " + formattedSql, error);
+            	}else{
+            		statementLogError("{conn-" + statement.getConnectionProxy().getId() + ", " + stmtId(statement)
+                              + "} execute error. " + sql, error);
+            	}
+            }
         }
     }
 
@@ -858,5 +905,19 @@ public abstract class LogFilter extends FilterEventAdapter implements LogFilterM
             return (T) this;
         }
         return null;
+    }
+    
+    protected String savepointToString(Savepoint savePoint) {
+    	String savePointString = null;
+    	try{
+    		savePointString = savePoint.getSavepointName();
+    	} catch (SQLException e) {
+    		try {
+				savePointString = String.valueOf(savePoint.getSavepointId());
+			} catch (SQLException e1) {
+				savePointString = savePoint.toString();
+			}
+    	}
+    	return savePointString;
     }
 }

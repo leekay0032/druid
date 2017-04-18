@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,119 @@
  */
 package com.alibaba.druid.sql.dialect.sqlserver.ast;
 
-import com.alibaba.druid.sql.ast.statement.SQLSelect;
+import java.util.ArrayList;
+import java.util.List;
 
-public class SQLServerSelect extends SQLSelect {
+import com.alibaba.druid.sql.ast.SQLExpr;
+import com.alibaba.druid.sql.ast.statement.SQLSelect;
+import com.alibaba.druid.sql.dialect.sqlserver.visitor.SQLServerASTVisitor;
+import com.alibaba.druid.sql.visitor.SQLASTVisitor;
+
+public class SQLServerSelect extends SQLSelect implements SQLServerObject {
+
+    private boolean      forBrowse;
+    private List<String> forXmlOptions = new ArrayList<String>(4);
+    private SQLExpr      xmlPath;
+
+    private SQLExpr      rowCount;
+    private SQLExpr      offset;
+
+    public boolean isForBrowse() {
+        return forBrowse;
+    }
+
+    public void setForBrowse(boolean forBrowse) {
+        this.forBrowse = forBrowse;
+    }
+
+    public List<String> getForXmlOptions() {
+        return forXmlOptions;
+    }
+
+    public void setForXmlOptions(List<String> forXmlOptions) {
+        this.forXmlOptions = forXmlOptions;
+    }
+
+    public SQLExpr getRowCount() {
+        return rowCount;
+    }
+
+    public void setRowCount(SQLExpr rowCount) {
+        if (rowCount != null) {
+            rowCount.setParent(this);
+        }
+        
+        this.rowCount = rowCount;
+    }
+
+    public SQLExpr getOffset() {
+        return offset;
+    }
+
+    public void setOffset(SQLExpr offset) {
+        if (offset != null) {
+            offset.setParent(this);
+        }
+        this.offset = offset;
+    }
+    
+    public SQLExpr getXmlPath() {
+        return xmlPath;
+    }
+
+    public void setXmlPath(SQLExpr xmlPath) {
+        if (xmlPath != null) {
+            xmlPath.setParent(this);
+        }
+        this.xmlPath = xmlPath;
+    }
+
+    @Override
+    protected void accept0(SQLASTVisitor visitor) {
+        this.accept0((SQLServerASTVisitor) visitor);
+    }
+
+    @Override
+    public void accept0(SQLServerASTVisitor visitor) {
+        if (visitor.visit(this)) {
+            acceptChild(visitor, this.query);
+            acceptChild(visitor, this.orderBy);
+            acceptChild(visitor, this.hints);
+            acceptChild(visitor, this.offset);
+            acceptChild(visitor, this.rowCount);
+        }
+
+        visitor.endVisit(this);
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + (forBrowse ? 1231 : 1237);
+        result = prime * result + ((forXmlOptions == null) ? 0 : forXmlOptions.hashCode());
+        result = prime * result + ((offset == null) ? 0 : offset.hashCode());
+        result = prime * result + ((rowCount == null) ? 0 : rowCount.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!super.equals(obj)) return false;
+        if (getClass() != obj.getClass()) return false;
+        SQLServerSelect other = (SQLServerSelect) obj;
+        if (forBrowse != other.forBrowse) return false;
+        if (forXmlOptions == null) {
+            if (other.forXmlOptions != null) return false;
+        } else if (!forXmlOptions.equals(other.forXmlOptions)) return false;
+        if (offset == null) {
+            if (other.offset != null) return false;
+        } else if (!offset.equals(other.offset)) return false;
+        if (rowCount == null) {
+            if (other.rowCount != null) return false;
+        } else if (!rowCount.equals(other.rowCount)) return false;
+        return true;
+    }
 
 }

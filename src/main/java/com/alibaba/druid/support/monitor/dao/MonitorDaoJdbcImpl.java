@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -544,8 +544,7 @@ public class MonitorDaoJdbcImpl implements MonitorDao {
 
         try {
             List<FieldInfo> fields = beanInfo.getFields();
-            for (int i = 0; i < fields.size(); ++i) {
-                FieldInfo field = fields.get(i);
+            for (FieldInfo field : fields) {
                 Class<?> fieldType = field.getFieldType();
                 Object value = field.getField().get(sqlStat);
 
@@ -596,8 +595,7 @@ public class MonitorDaoJdbcImpl implements MonitorDao {
 
         buf.append(" (domain, app, cluster, host, pid, collectTime");
         List<FieldInfo> fields = beanInfo.getFields();
-        for (int i = 0; i < fields.size(); ++i) {
-            FieldInfo field = fields.get(i);
+        for (FieldInfo field : fields) {
             buf.append(", ");
             buf.append(field.getColumnName());
         }

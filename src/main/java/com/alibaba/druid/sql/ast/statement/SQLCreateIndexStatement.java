@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,9 +31,16 @@ public class SQLCreateIndexStatement extends SQLStatementImpl implements SQLDDLS
     private List<SQLSelectOrderByItem> items = new ArrayList<SQLSelectOrderByItem>();
 
     private String                     type;
+    
+    // for mysql
+    private String                     using;
 
     public SQLCreateIndexStatement(){
 
+    }
+    
+    public SQLCreateIndexStatement(String dbType){
+        super (dbType);
     }
 
     public SQLTableSource getTable() {
@@ -52,8 +59,11 @@ public class SQLCreateIndexStatement extends SQLStatementImpl implements SQLDDLS
         return items;
     }
 
-    public void setItems(List<SQLSelectOrderByItem> items) {
-        this.items = items;
+    public void addItem(SQLSelectOrderByItem item) {
+        if (item != null) {
+            item.setParent(this);
+        }
+        this.items.add(item);
     }
 
     public SQLName getName() {
@@ -70,6 +80,14 @@ public class SQLCreateIndexStatement extends SQLStatementImpl implements SQLDDLS
 
     public void setType(String type) {
         this.type = type;
+    }
+    
+    public String getUsing() {
+        return using;
+    }
+
+    public void setUsing(String using) {
+        this.using = using;
     }
 
     @Override

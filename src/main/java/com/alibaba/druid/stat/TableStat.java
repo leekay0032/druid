@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
  */
 package com.alibaba.druid.stat;
 
+import com.alibaba.druid.util.StringUtils;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import com.alibaba.druid.util.StringUtils;
 
 public class TableStat {
 
@@ -202,6 +202,14 @@ public class TableStat {
             }
 
             Name other = (Name) o;
+            
+            if (this.name == other.name) {
+                return true;
+            }
+            
+            if (this.name == null | other.name == null) {
+                return false;
+            }
 
             return this.name.equalsIgnoreCase(other.name);
         }
@@ -216,6 +224,10 @@ public class TableStat {
         private Column left;
         private Column right;
         private String operator;
+
+        public Relationship(){
+
+        }
 
         public Column getLeft() {
             return left;
@@ -360,26 +372,26 @@ public class TableStat {
         }
 
         public String toString() {
-            StringBuffer buf = new StringBuffer();
-            buf.append(this.column.toString());
-            buf.append(' ');
-            buf.append(this.operator);
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.append(this.column.toString());
+            stringBuilder.append(' ');
+            stringBuilder.append(this.operator);
 
             if (values.size() == 1) {
-                buf.append(' ');
-                buf.append(String.valueOf(this.values.get(0)));
+                stringBuilder.append(' ');
+                stringBuilder.append(String.valueOf(this.values.get(0)));
             } else if (values.size() > 0) {
-                buf.append(" (");
+                stringBuilder.append(" (");
                 for (int i = 0; i < values.size(); ++i) {
                     if (i != 0) {
-                        buf.append(", ");
+                        stringBuilder.append(", ");
                     }
-                    buf.append(String.valueOf(values.get(i)));
+                    stringBuilder.append(String.valueOf(values.get(i)));
                 }
-                buf.append(")");
+                stringBuilder.append(")");
             }
 
-            return buf.toString();
+            return stringBuilder.toString();
         }
     }
 
@@ -393,7 +405,17 @@ public class TableStat {
         private boolean             having;
         private boolean             join;
 
+        private boolean             primaryKey; // for ddl
+        private boolean             unique; //
+
         private Map<String, Object> attributes = new HashMap<String, Object>();
+
+        private transient String    fullName;
+
+        /**
+         * @since 1.0.20
+         */
+        private String              dataType;
 
         public Column(){
 
@@ -410,6 +432,19 @@ public class TableStat {
 
         public void setTable(String table) {
             this.table = table;
+            this.fullName = null;
+        }
+
+        public String getFullName() {
+            if (fullName == null) {
+                if (table != null) {
+                    fullName = name;
+                } else {
+                    fullName = table + '.' + name;
+                }
+            }
+
+            return fullName;
         }
 
         public boolean isWhere() {
@@ -452,12 +487,43 @@ public class TableStat {
             this.having = having;
         }
 
+        public boolean isPrimaryKey() {
+            return primaryKey;
+        }
+
+        public void setPrimaryKey(boolean primaryKey) {
+            this.primaryKey = primaryKey;
+        }
+
+        public boolean isUnique() {
+            return unique;
+        }
+
+        public void setUnique(boolean unique) {
+            this.unique = unique;
+        }
+
         public String getName() {
             return name;
         }
 
         public void setName(String name) {
             this.name = name;
+            this.fullName = null;
+        }
+        
+        /**
+         * @since 1.0.20
+         */
+        public String getDataType() {
+            return dataType;
+        }
+
+        /**
+         * @since 1.0.20
+         */
+        public void setDataType(String dataType) {
+            this.dataType = dataType;
         }
 
         public Map<String, Object> getAttributes() {
@@ -484,6 +550,11 @@ public class TableStat {
         }
 
         public boolean equals(Object obj) {
+
+            if (!(obj instanceof Column)) {
+                return false;
+            }
+
             Column column = (Column) obj;
 
             if (table == null) {
@@ -511,16 +582,17 @@ public class TableStat {
     }
 
     public static enum Mode {
-        Insert(1), //
-        Update(2), //
-        Delete(4), //
-        Select(8), //
-        Merge(16), //
-        Truncate(32), //
-        Alter(64), //
-        Drop(128), //
-        DropIndex(256), //
-        CreateIndex(512)//
+                             Insert(1), //
+                             Update(2), //
+                             Delete(4), //
+                             Select(8), //
+                             Merge(16), //
+                             Truncate(32), //
+                             Alter(64), //
+                             Drop(128), //
+                             DropIndex(256), //
+                             CreateIndex(512), //
+                             Replace(1024),
         ; //
 
         public final int mark;

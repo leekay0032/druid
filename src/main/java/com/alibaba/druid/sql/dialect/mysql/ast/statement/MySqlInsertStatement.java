@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,32 +30,12 @@ public class MySqlInsertStatement extends SQLInsertStatement {
     private boolean             delayed            = false;
     private boolean             highPriority       = false;
     private boolean             ignore             = false;
-
-    private List<ValuesClause>  valuesList         = new ArrayList<ValuesClause>();
+    private boolean             rollbackOnFail     = false;
 
     private final List<SQLExpr> duplicateKeyUpdate = new ArrayList<SQLExpr>();
 
     public List<SQLExpr> getDuplicateKeyUpdate() {
         return duplicateKeyUpdate;
-    }
-
-    public ValuesClause getValues() {
-        if (valuesList.size() == 0) {
-            return null;
-        }
-        return valuesList.get(0);
-    }
-
-    public void setValues(ValuesClause values) {
-        if (valuesList.size() == 0) {
-            valuesList.add(values);
-        } else {
-            valuesList.set(0, values);
-        }
-    }
-
-    public List<ValuesClause> getValuesList() {
-        return valuesList;
     }
 
     public boolean isLowPriority() {
@@ -88,6 +68,14 @@ public class MySqlInsertStatement extends SQLInsertStatement {
 
     public void setIgnore(boolean ignore) {
         this.ignore = ignore;
+    }
+
+    public boolean isRollbackOnFail() {
+        return rollbackOnFail;
+    }
+
+    public void setRollbackOnFail(boolean rollbackOnFail) {
+        this.rollbackOnFail = rollbackOnFail;
     }
 
     @Override

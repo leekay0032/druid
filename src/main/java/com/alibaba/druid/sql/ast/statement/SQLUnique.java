@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import java.util.List;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
 
-public class SQLUnique extends SQLConstaintImpl implements SQLUniqueConstraint, SQLTableElement {
+public class SQLUnique extends SQLConstraintImpl implements SQLUniqueConstraint, SQLTableElement {
 
     private final List<SQLExpr> columns = new ArrayList<SQLExpr>();
 
@@ -31,6 +31,13 @@ public class SQLUnique extends SQLConstaintImpl implements SQLUniqueConstraint, 
 
     public List<SQLExpr> getColumns() {
         return columns;
+    }
+    
+    public void addColumn(SQLExpr column) {
+        if (column != null) {
+            column.setParent(this);
+        }
+        this.columns.add(column);
     }
 
     @Override

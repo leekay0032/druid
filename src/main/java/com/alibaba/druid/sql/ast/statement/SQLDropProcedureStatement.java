@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,14 @@ public class SQLDropProcedureStatement extends SQLStatementImpl implements SQLDD
 
     private SQLName name;
     private boolean ifExists;
+    
+    public SQLDropProcedureStatement() {
+        
+    }
+    
+    public SQLDropProcedureStatement(String dbType) {
+        super (dbType);
+    }
 
     @Override
     protected void accept0(SQLASTVisitor visitor) {

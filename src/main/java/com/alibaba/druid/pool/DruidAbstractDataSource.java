@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -48,6 +50,7 @@ import javax.security.auth.callback.NameCallback;
 import javax.security.auth.callback.PasswordCallback;
 import javax.sql.DataSource;
 
+import com.alibaba.druid.DruidRuntimeException;
 import com.alibaba.druid.filter.Filter;
 import com.alibaba.druid.filter.FilterChainImpl;
 import com.alibaba.druid.filter.FilterManager;
@@ -59,15 +62,11 @@ import com.alibaba.druid.stat.JdbcSqlStat;
 import com.alibaba.druid.stat.JdbcStatManager;
 import com.alibaba.druid.support.logging.Log;
 import com.alibaba.druid.support.logging.LogFactory;
-import com.alibaba.druid.util.DruidPasswordCallback;
-import com.alibaba.druid.util.Histogram;
-import com.alibaba.druid.util.JdbcUtils;
-import com.alibaba.druid.util.StringUtils;
-import com.alibaba.druid.util.Utils;
+import com.alibaba.druid.util.*;
 
 /**
- * @author wenshao<szujobs@hotmail.com>
- * @author ljw<ljw2083@alibaba-inc.com>
+ * @author wenshao [szujobs@hotmail.com]
+ * @author ljw [ljw2083@alibaba-inc.com]
  */
 public abstract class DruidAbstractDataSource extends WrapperAdapter implements DruidAbstractDataSourceMBean, DataSource, DataSourceProxy, Serializable {
 
@@ -95,6 +94,8 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
      * @see #setMinEvictableIdleTimeMillis
      */
     public static final long                           DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS    = 1000L * 60L * 30L;
+    public static final long                           DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS    = 1000L * 60L * 60L * 7;
+    public static final long                           DEFAULT_PHY_TIMEOUT_MILLIS                = -1;
 
     protected volatile boolean                         defaultAutoCommit                         = true;
     protected volatile Boolean                         defaultReadOnly;
@@ -156,6 +157,9 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile int                             numTestsPerEvictionRun                    = DEFAULT_NUM_TESTS_PER_EVICTION_RUN;
 
     protected volatile long                            minEvictableIdleTimeMillis                = DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS;
+    protected volatile long                            maxEvictableIdleTimeMillis                = DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS;
+
+    protected volatile long                            phyTimeoutMillis                          = DEFAULT_PHY_TIMEOUT_MILLIS;
 
     protected volatile boolean                         removeAbandoned;
 
@@ -227,6 +231,8 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected Condition                                notEmpty;
     protected Condition                                empty;
 
+    protected ReentrantLock                            activeConnectionLock                      = new ReentrantLock();
+
     protected AtomicLong                               createCount                               = new AtomicLong();
     protected AtomicLong                               destroyCount                              = new AtomicLong();
 
@@ -236,6 +242,16 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected long                                     timeBetweenLogStatsMillis;
     protected DruidDataSourceStatLogger                statLogger                                = new DruidDataSourceStatLoggerImpl();
+    
+    private boolean                                    asyncCloseConnectionEnable                = false;
+    protected int                                      maxCreateTaskCount                        = 3;
+    protected boolean                                  failFast                                  = false;
+    protected AtomicBoolean                            failContinuous                            = new AtomicBoolean(false);
+    protected ScheduledExecutorService                 destroyScheduler;
+    protected ScheduledExecutorService                 createScheduler;
+
+    protected boolean                                  initVariants                              = false;
+    protected boolean                                  initGlobalVariants                        = false;
 
     public DruidAbstractDataSource(boolean lockFair){
         lock = new ReentrantLock(lockFair);
@@ -585,6 +601,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     }
 
     public void addConnectionProperty(String name, String value) {
+        if (StringUtils.equals(connectProperties.getProperty(name), value)) {
+            return;
+        }
+
         if (inited) {
             throw new UnsupportedOperationException();
         }
@@ -681,7 +701,33 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         if (minEvictableIdleTimeMillis < 1000 * 30) {
             LOG.error("minEvictableIdleTimeMillis should be greater than 30000");
         }
+        
         this.minEvictableIdleTimeMillis = minEvictableIdleTimeMillis;
+    }
+    
+    public long getMaxEvictableIdleTimeMillis() {
+        return maxEvictableIdleTimeMillis;
+    }
+    
+
+    public void setMaxEvictableIdleTimeMillis(long maxEvictableIdleTimeMillis) {
+        if (maxEvictableIdleTimeMillis < 1000 * 30) {
+            LOG.error("maxEvictableIdleTimeMillis should be greater than 30000");
+        }
+        
+        if (maxEvictableIdleTimeMillis < minEvictableIdleTimeMillis) {
+            throw new IllegalArgumentException("maxEvictableIdleTimeMillis must be grater than minEvictableIdleTimeMillis");
+        }
+        
+        this.maxEvictableIdleTimeMillis = maxEvictableIdleTimeMillis;
+    }
+
+    public long getPhyTimeoutMillis() {
+        return phyTimeoutMillis;
+    }
+
+    public void setPhyTimeoutMillis(long phyTimeoutMillis) {
+        this.phyTimeoutMillis = phyTimeoutMillis;
     }
 
     public int getNumTestsPerEvictionRun() {
@@ -818,12 +864,27 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.userCallback = userCallback;
     }
 
+    public boolean isInitVariants() {
+        return initVariants;
+    }
+
+    public void setInitVariants(boolean initVariants) {
+        this.initVariants = initVariants;
+    }
+
+    public boolean isInitGlobalVariants() {
+        return initGlobalVariants;
+    }
+
+    public void setInitGlobalVariants(boolean initGlobalVariants) {
+        this.initGlobalVariants = initGlobalVariants;
+    }
+
     /**
      * Retrieves the number of seconds the driver will wait for a <code>Statement</code> object to execute. If the limit
      * is exceeded, a <code>SQLException</code> is thrown.
      * 
      * @return the current query timeout limit in seconds; zero means there is no limit
-     * @exception SQLException if a database access error occurs or this method is called on a closed
      * <code>Statement</code>
      * @see #setQueryTimeout
      */
@@ -839,8 +900,6 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
      * documentation for details).
      * 
      * @param seconds the new query timeout limit in seconds; zero means there is no limit
-     * @exception SQLException if a database access error occurs, this method is called on a closed
-     * <code>Statement</code> or the condition seconds >= 0 is not satisfied
      * @see #getQueryTimeout
      */
     public void setQueryTimeout(int seconds) {
@@ -915,6 +974,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         if (inited && value > this.maxActive) {
             throw new IllegalArgumentException("minIdle greater than maxActive, " + maxActive + " < " + this.minIdle);
         }
+        
+        if (minIdle < 0) {
+            throw new IllegalArgumentException("minIdle must > 0");
+        }
 
         this.minIdle = value;
     }
@@ -961,6 +1024,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     }
 
     public void setUsername(String username) {
+        if (StringUtils.equals(this.username, username)) {
+            return;
+        }
+
         if (inited) {
             throw new UnsupportedOperationException();
         }
@@ -1025,6 +1092,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     }
 
     public void setUrl(String jdbcUrl) {
+        if (StringUtils.equals(this.jdbcUrl, jdbcUrl)) {
+            return;
+        }
+
         if (inited) {
             throw new UnsupportedOperationException();
         }
@@ -1045,7 +1116,15 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     }
 
     public void setDriverClassName(String driverClass) {
+        if (driverClass != null && driverClass.length() > 256) {
+            throw new IllegalArgumentException("driverClassName length > 256.");
+        }
+
         if (inited) {
+            if (StringUtils.equals(this.driverClass, driverClass)) {
+                return;
+            }
+            
             throw new UnsupportedOperationException();
         }
 
@@ -1205,8 +1284,19 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         }
 
         if (validConnectionChecker != null) {
-            if (!validConnectionChecker.isValidConnection(conn, validationQuery, validationQueryTimeout)) {
-                throw new SQLException("validateConnection false");
+            boolean result = true;
+            Exception error = null;
+            try {
+                result = validConnectionChecker.isValidConnection(conn, validationQuery, validationQueryTimeout);
+            } catch (Exception ex) {
+                error = ex;
+            }
+            
+            if (!result) {
+                SQLException sqlError = error != null ? //
+                    new SQLException("validateConnection false", error) //
+                    : new SQLException("validateConnection false");
+                throw sqlError;
             }
             return;
         }
@@ -1284,8 +1374,11 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     }
 
     public Set<DruidPooledConnection> getActiveConnections() {
-        synchronized (activeConnections) {
+        activeConnectionLock.lock();
+        try {
             return new HashSet<DruidPooledConnection>(this.activeConnections.keySet());
+        } finally {
+            activeConnectionLock.unlock();
         }
     }
 
@@ -1375,7 +1468,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return conn;
     }
 
-    public Connection createPhysicalConnection() throws SQLException {
+    public PhysicalConnectionInfo createPhysicalConnection() throws SQLException {
         String url = this.getUrl();
         Properties connectProperties = getConnectProperties();
 
@@ -1416,45 +1509,88 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
             physicalConnectProperties.put("password", password);
         }
 
-        Connection conn;
+        Connection conn = null;
 
-        long startNano = System.nanoTime();
+        long connectStartNanos = System.nanoTime();
+        long connectedNanos, initedNanos, validatedNanos;
+
+        Map<String, Object> variables = initVariants
+                ? new HashMap<String, Object>()
+                : null;
+        Map<String, Object> globalVariables = initGlobalVariants
+                ? new HashMap<String, Object>()
+                : null;
 
         try {
             conn = createPhysicalConnection(url, physicalConnectProperties);
+            connectedNanos = System.nanoTime();
 
             if (conn == null) {
                 throw new SQLException("connect error, url " + url + ", driverClass " + this.driverClass);
             }
 
-            initPhysicalConnection(conn);
+            initPhysicalConnection(conn, variables, globalVariables);
+            initedNanos = System.nanoTime();
 
             validateConnection(conn);
-            createError = null;
+            validatedNanos = System.nanoTime();
+            
+            setCreateError(null);
         } catch (SQLException ex) {
-            createErrorCount.incrementAndGet();
-            createError = ex;
-            lastCreateError = ex;
-            lastCreateErrorTimeMillis = System.currentTimeMillis();
+            setCreateError(ex);
+            JdbcUtils.close(conn);
             throw ex;
         } catch (RuntimeException ex) {
-            createErrorCount.incrementAndGet();
-            createError = ex;
-            lastCreateError = ex;
-            lastCreateErrorTimeMillis = System.currentTimeMillis();
+            setCreateError(ex);
+            JdbcUtils.close(conn);
             throw ex;
         } catch (Error ex) {
             createErrorCount.incrementAndGet();
+            setCreateError(ex);
+            JdbcUtils.close(conn);
             throw ex;
         } finally {
-            long nano = System.nanoTime() - startNano;
+            long nano = System.nanoTime() - connectStartNanos;
             createTimespan += nano;
         }
 
-        return conn;
+        return new PhysicalConnectionInfo(conn, connectStartNanos, connectedNanos, initedNanos, validatedNanos, variables, globalVariables);
+    }
+
+    protected void setCreateError(Throwable ex) {
+        if (ex == null) {
+            lock.lock();
+            try {
+                if (createError != null) {
+                    createError = null;
+                }
+            } finally {
+                lock.unlock();
+            }
+            return;
+        }
+        
+        createErrorCount.incrementAndGet();
+        long now = System.currentTimeMillis();
+        lock.lock();
+        try {
+            createError = ex;
+            lastCreateError = ex;
+            lastCreateErrorTimeMillis = now;
+        } finally {
+            lock.unlock();
+        }
+    }
+    
+    protected void setFailContinuous(boolean fail) {
+        failContinuous.set(fail);
     }
 
     public void initPhysicalConnection(Connection conn) throws SQLException {
+        initPhysicalConnection(conn, null, null);
+    }
+
+    public void initPhysicalConnection(Connection conn, Map<String, Object> variables, Map<String, Object> globalVariables) throws SQLException {
         if (conn.getAutoCommit() != defaultAutoCommit) {
             conn.setAutoCommit(defaultAutoCommit);
         }
@@ -1476,19 +1612,52 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         }
 
         Collection<String> initSqls = getConnectionInitSqls();
-        if (initSqls.size() == 0) {
+        if (initSqls.size() == 0
+                && variables == null
+                && globalVariables == null) {
             return;
         }
 
         Statement stmt = null;
         try {
             stmt = conn.createStatement();
+
             for (String sql : initSqls) {
                 if (sql == null) {
                     continue;
                 }
 
                 stmt.execute(sql);
+            }
+
+            if (JdbcConstants.MYSQL.equals(dbType)) {
+                if (variables != null) {
+                    ResultSet rs = null;
+                    try {
+                        rs = stmt.executeQuery("show variables");
+                        while (rs.next()) {
+                            String name = rs.getString(1);
+                            Object value = rs.getObject(2);
+                            variables.put(name, value);
+                        }
+                    } finally {
+                        JdbcUtils.close(rs);
+                    }
+                }
+
+                if (globalVariables != null) {
+                    ResultSet rs = null;
+                    try {
+                        rs = stmt.executeQuery("show global variables");
+                        while (rs.next()) {
+                            String name = rs.getString(1);
+                            Object value = rs.getObject(2);
+                            globalVariables.put(name, value);
+                        }
+                    } finally {
+                        JdbcUtils.close(rs);
+                    }
+                }
             }
         } finally {
             JdbcUtils.close(stmt);
@@ -1557,8 +1726,8 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
         // 25 - 29
         map.put("ResultSetOpenCount", stat.getResultSetStat().getOpenCount());
-        map.put("ResultSetOpenningCount", stat.getResultSetStat().getOpenningCount());
-        map.put("ResultSetOpenningMax", stat.getResultSetStat().getOpenningMax());
+        map.put("ResultSetOpenningCount", stat.getResultSetStat().getOpeningCount());
+        map.put("ResultSetOpenningMax", stat.getResultSetStat().getOpeningMax());
         map.put("ResultSetFetchRowCount", stat.getResultSetStat().getFetchRowCount());
         map.put("ResultSetLastOpenTime", stat.getResultSetStat().getLastOpenTime());
 
@@ -1619,7 +1788,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         decrementCachedPreparedStatementCount();
         incrementCachedPreparedStatementDeleteCount();
 
-        JdbcUtils.close(stmtHolder.getStatement());
+        JdbcUtils.close(stmtHolder.statement);
     }
 
     protected void cloneTo(DruidAbstractDataSource to) {
@@ -1676,7 +1845,138 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         to.dupCloseLogEnable = this.dupCloseLogEnable;
         to.isOracle = this.isOracle;
         to.useOracleImplicitCache = this.useOracleImplicitCache;
+        to.asyncCloseConnectionEnable = this.asyncCloseConnectionEnable;
+        to.createScheduler = this.createScheduler;
+        to.destroyScheduler = this.destroyScheduler;
+    }
+    
+    public abstract void discardConnection(Connection realConnection);
+    
+
+    public boolean isAsyncCloseConnectionEnable() {
+        if (isRemoveAbandoned()) {
+            return true;
+        }
+        return asyncCloseConnectionEnable;
     }
 
-    public abstract void discardConnection(Connection realConnection);
+    public void setAsyncCloseConnectionEnable(boolean asyncCloseConnectionEnable) {
+        this.asyncCloseConnectionEnable = asyncCloseConnectionEnable;
+    }
+
+    public ScheduledExecutorService getCreateScheduler() {
+        return createScheduler;
+    }
+    
+    public void setCreateScheduler(ScheduledExecutorService createScheduler) {
+        if (isInited()) {
+            throw new DruidRuntimeException("dataSource inited.");
+        }
+        this.createScheduler = createScheduler;
+    }
+
+    public ScheduledExecutorService getDestroyScheduler() {
+        return destroyScheduler;
+    }
+
+    
+    public void setDestroyScheduler(ScheduledExecutorService destroyScheduler) {
+        if (isInited()) {
+            throw new DruidRuntimeException("dataSource inited.");
+        }
+        this.destroyScheduler = destroyScheduler;
+    }
+
+    public boolean isInited() {
+        return this.inited;
+    }
+
+    
+    public int getMaxCreateTaskCount() {
+        return maxCreateTaskCount;
+    }
+
+    
+    public void setMaxCreateTaskCount(int maxCreateTaskCount) {
+        if (maxCreateTaskCount < 1) {
+            throw new IllegalArgumentException();
+        }
+        
+        this.maxCreateTaskCount = maxCreateTaskCount;
+    }
+    
+    public boolean isFailFast() {
+        return failFast;
+    }
+    
+    public void setFailFast(boolean failFast) {
+        this.failFast = failFast;
+    }
+
+    public static class PhysicalConnectionInfo {
+        private Connection connection;
+        private long connectStartNanos;
+        private long connectedNanos;
+        private long initedNanos;
+        private long validatedNanos;
+        private Map<String, Object> vairiables;
+        private Map<String, Object> globalVairiables;
+
+        public PhysicalConnectionInfo(Connection connection //
+                , long connectStartNanos //
+                , long connectedNanos //
+                , long initedNanos //
+                , long validatedNanos) {
+            this(connection, connectStartNanos, connectedNanos, initedNanos,validatedNanos, null, null);
+        }
+        
+        public PhysicalConnectionInfo(Connection connection //
+                                      , long connectStartNanos //
+                                      , long connectedNanos //
+                                      , long initedNanos //
+                                      , long validatedNanos
+                                      , Map<String, Object> vairiables
+                                      , Map<String, Object> globalVairiables) {
+            this.connection = connection;
+            
+            this.connectStartNanos = connectStartNanos;
+            this.connectedNanos = connectedNanos;
+            this.initedNanos = initedNanos;
+            this.validatedNanos = validatedNanos;
+            this.vairiables = vairiables;
+            this.globalVairiables = globalVairiables;
+        }
+        
+        public Connection getPhysicalConnection() {
+            return connection;
+        }
+
+        public long getConnectStartNanos() {
+            return connectStartNanos;
+        }
+        
+        public long getConnectedNanos() {
+            return connectedNanos;
+        }
+        
+        public long getInitedNanos() {
+            return initedNanos;
+        }
+
+        public long getValidatedNanos() {
+            return validatedNanos;
+        }
+        
+        public long getConnectNanoSpan() {
+            return connectedNanos - connectStartNanos;
+        }
+
+        public Map<String, Object> getVairiables() {
+            return vairiables;
+        }
+
+        public Map<String, Object> getGlobalVairiables() {
+            return globalVairiables;
+        }
+    }
 }

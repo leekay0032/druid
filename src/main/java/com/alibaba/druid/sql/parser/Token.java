@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,7 @@ package com.alibaba.druid.sql.parser;
 /**
  * 
  * SQL Token 
- * @author wenshao 2011-5-18 下午05:16:49
- * @formatter:off
+ * @author wenshao [szujobs@hotmail.com]
  */
 public enum Token {
     SELECT("SELECT"), 
@@ -127,6 +126,23 @@ public enum Token {
     BINARY("BINARY"),
     SHOW("SHOW"),
     REPLACE("REPLACE"),
+
+    // MySql procedure add by zz
+    WHILE("WHILE"),
+    DO("DO"),
+    LEAVE("LEAVE"),
+    ITERATE("ITERATE"),
+    REPEAT("REPEAT"),
+    UNTIL("UNTIL"),
+    OPEN("OPEN"),
+    CLOSE("CLOSE"),
+    OUT("OUT"),
+    INOUT("INOUT"),
+    EXIT("EXIT"),
+    UNDO("UNDO"),
+    SQLSTATE("SQLSTATE"),
+    CONDITION("CONDITION"),
+    DIV("DIV"),
     
     //postgresql
     WINDOW("WINDOW"),
@@ -154,7 +170,9 @@ public enum Token {
     RETURNING("RETURNING"),
     COMMENT("COMMENT"),
     OVER("OVER"),
-    
+    TYPE("TYPE"),
+    ILIKE("ILIKE"),
+
     // oracle
     START("START"),
     PRIOR("PRIOR"),
@@ -177,6 +195,7 @@ public enum Token {
     DECLARE("DECLARE"),
     EXCEPTION("EXCEPTION"),
     GRANT("GRANT"),
+    REVOKE("REVOKE"),
     LOOP("LOOP"),
     GOTO("GOTO"),
     COMMIT("COMMIT"),
@@ -220,6 +239,9 @@ public enum Token {
     // transact-sql
     TOP("TOP"),
     
+    ARRAY("ARRAY"),
+    DISTRIBUTE("DISTRIBUTE"),
+    
     // hive
 
     EOF, 
@@ -245,6 +267,22 @@ public enum Token {
     PARTITION,
     PARTITIONED,
     OVERWRITE,
+    
+    // Teradata
+    SEL("SEL"),
+    LOCKING("LOCKING"),
+    ACCESS("ACCESS"),
+    VOLATILE("VOLATILE"),
+    MULTISET("MULTISET"),
+    POSITION("POSITION"),
+    RANGE_N("RANGE_N"),
+    FORMAT("FORMAT"),
+    QUALIFY("QUALIFY"),
+    MOD("MOD"),
+    
+    CONCAT("CONCAT"), // DB2
+
+    UPSERT("UPSERT"), // Phoenix
 
     LPAREN("("), 
     RPAREN(")"), 
@@ -261,10 +299,18 @@ public enum Token {
     GT(">"), 
     LT("<"), 
     BANG("!"),
-    TILDE("~"), 
-    QUES("?"), 
+    BANGBANG("!!"),
+    BANG_TILDE("!~"),
+    BANG_TILDE_STAR("!~*"),
+    TILDE("~"),
+    TILDE_STAR("~*"),
+    TILDE_EQ("~="),
+    QUES("?"),
+    QUESQUES("??"),
+    QUESBAR("?|"),
+    QUESAMP("?&"),
     COLON(":"), 
-    COLONCOLON(":"), 
+    COLONCOLON("::"), 
     COLONEQ(":="), 
     EQEQ("=="), 
     LTEQ("<="), 
@@ -276,8 +322,12 @@ public enum Token {
     BANGLT("!<"),
     AMPAMP("&&"), 
     BARBAR("||"), 
+    BARBARSLASH("||/"), 
+    BARSLASH("|/"), 
     PLUS("+"), 
     SUB("-"), 
+    SUBGT("->"), 
+    SUBGTGT("->>"), 
     STAR("*"), 
     SLASH("/"), 
     AMP("&"), 
@@ -286,7 +336,14 @@ public enum Token {
     PERCENT("%"), 
     LTLT("<<"), 
     GTGT(">>"),
-    MONKEYS_AT("@");
+    MONKEYS_AT("@"),
+    MONKEYS_AT_AT("@@"),
+    POUND("#"),
+    POUNDGT("#>"),
+    POUNDGTGT("#>>"),
+    MONKEYS_AT_GT("@>"),
+    LT_MONKEYS_AT("<@"),
+    ;
 
     public final String name;
 

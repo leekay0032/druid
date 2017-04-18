@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,21 +36,37 @@ public class SQLDropTableStatement extends SQLStatementImpl implements SQLDDLSta
     public SQLDropTableStatement(){
 
     }
-
-    public SQLDropTableStatement(SQLName name){
-        this(new SQLExprTableSource(name));
+    
+    public SQLDropTableStatement(String dbType){
+        super (dbType);
     }
 
+    public SQLDropTableStatement(SQLName name, String dbType){
+        this(new SQLExprTableSource(name), dbType);
+    }
+    
+    public SQLDropTableStatement(SQLName name){
+        this (name, null);
+    }
+    
     public SQLDropTableStatement(SQLExprTableSource tableSource){
+        this (tableSource, null);
+    }
+
+    public SQLDropTableStatement(SQLExprTableSource tableSource, String dbType){
+        this (dbType);
         this.tableSources.add(tableSource);
     }
 
     public List<SQLExprTableSource> getTableSources() {
         return tableSources;
     }
-
-    public void setTableSources(List<SQLExprTableSource> tableSources) {
-        this.tableSources = tableSources;
+    
+    public void addPartition(SQLExprTableSource tableSource) {
+        if (tableSource != null) {
+            tableSource.setParent(this);
+        }
+        this.tableSources.add(tableSource);
     }
 
     public void setName(SQLName name) {

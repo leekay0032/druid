@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,13 @@
  */
 package com.alibaba.druid.pool;
 
+import com.alibaba.druid.proxy.jdbc.WrapperProxy;
+
 import java.sql.SQLException;
 import java.sql.Wrapper;
 
-import com.alibaba.druid.proxy.jdbc.WrapperProxy;
-
 /**
- * @author wenshao<szujobs@hotmail.com>
+ * @author wenshao [szujobs@hotmail.com]
  */
 public class PoolableWrapper implements Wrapper {
 
@@ -33,11 +33,17 @@ public class PoolableWrapper implements Wrapper {
 
     @Override
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
+
+        if (null == wrapper) {
+            //Best to log error.
+            return false;
+        }
+
         if (iface == null) {
             return false;
         }
 
-        if (wrapper != null && iface == wrapper.getClass()) {
+        if (iface == wrapper.getClass()) {
             return true;
         }
 
@@ -57,11 +63,17 @@ public class PoolableWrapper implements Wrapper {
     @SuppressWarnings("unchecked")
     @Override
     public <T> T unwrap(Class<T> iface) throws SQLException {
+
+        if (null == wrapper) {
+            //Best to log error.
+            return null;
+        }
+
         if (iface == null) {
             return null;
         }
 
-        if (wrapper != null && iface == wrapper.getClass()) {
+        if (iface == wrapper.getClass()) {
             return (T) wrapper;
         }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
  */
 package com.alibaba.druid.pool.vendor;
 
-import java.io.Serializable;
-import java.sql.SQLException;
-import java.util.HashSet;
-import java.util.Properties;
-import java.util.Set;
-
 import com.alibaba.druid.pool.ExceptionSorter;
 import com.alibaba.druid.support.logging.Log;
 import com.alibaba.druid.support.logging.LogFactory;
+
+import java.io.Serializable;
+import java.sql.SQLException;
+import java.sql.SQLRecoverableException;
+import java.util.HashSet;
+import java.util.Properties;
+import java.util.Set;
 
 /**
  * Implementation of ExceptionSorter for Oracle.
@@ -66,6 +67,10 @@ public class OracleExceptionSorter implements ExceptionSorter, Serializable {
     }
 
     public boolean isExceptionFatal(final SQLException e) {
+        if (e instanceof SQLRecoverableException) {
+            return true;
+        }
+
         final int error_code = Math.abs(e.getErrorCode()); // I can't remember if the errors are negative or positive.
 
         switch (error_code) {
@@ -110,6 +115,7 @@ public class OracleExceptionSorter implements ExceptionSorter, Serializable {
             case 17001: // Internal Error
             case 17002: // Io exception
             case 17008: // Closed Connection
+            case 17009: // Closed Statement
             case 17024: // No data read
             case 17089: // internal error
             case 17409: // invalid buffer length
@@ -139,11 +145,11 @@ public class OracleExceptionSorter implements ExceptionSorter, Serializable {
         // certain strings.
 
         if ((error_code < 20000 || error_code >= 21000)) {
-            if ((error_text.indexOf("SOCKET") > -1) // for control socket error
-                || (error_text.indexOf("套接字") > -1) // for control socket error
-                || (error_text.indexOf("CONNECTION HAS ALREADY BEEN CLOSED") > -1) //
-                || (error_text.indexOf("BROKEN PIPE") > -1) //
-                || (error_text.indexOf("管道已结束") > -1) //
+            if ((error_text.contains("SOCKET")) // for control socket error
+                || (error_text.contains("套接字")) // for control socket error
+                || (error_text.contains("CONNECTION HAS ALREADY BEEN CLOSED")) //
+                || (error_text.contains("BROKEN PIPE")) //
+                || (error_text.contains("管道已结束")) //
             ) {
                 return true;
             }

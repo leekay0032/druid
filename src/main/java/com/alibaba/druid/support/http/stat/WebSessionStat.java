@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,14 @@
  */
 package com.alibaba.druid.support.http.stat;
 
-import static com.alibaba.druid.util.JdbcSqlStatUtils.get;
+import com.alibaba.druid.support.logging.Log;
+import com.alibaba.druid.support.logging.LogFactory;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
-import com.alibaba.druid.support.logging.Log;
-import com.alibaba.druid.support.logging.LogFactory;
+import static com.alibaba.druid.util.JdbcSqlStatUtils.get;
 
 public class WebSessionStat {
 
@@ -214,8 +214,6 @@ public class WebSessionStat {
             if (running > max) {
                 if (concurrentMaxUpdater.compareAndSet(this, max, running)) {
                     break;
-                } else {
-                    continue;
                 }
             } else {
                 break;
@@ -264,7 +262,7 @@ public class WebSessionStat {
         }
 
         if (remoteAddresses.length() > 256) {
-            LOG.error("sessoin ip change too many");
+            LOG.error("session ip change too many");
             return;
         }
 
@@ -387,7 +385,7 @@ public class WebSessionStat {
         val.jdbcRollbackCount = get(this, jdbcRollbackCountUpdater, reset);
         val.createTimeMillis = createTimeMillis;
         val.lastAccessTimeMillis = lastAccessTimeMillis;
-        val.remoteAddresse = remoteAddresses;
+        val.remoteAddress = remoteAddresses;
         val.principal = principal;
         val.userAgent = userAgent;
 

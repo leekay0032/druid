@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,21 @@
  */
 package com.alibaba.druid.support.json;
 
+import com.alibaba.druid.sql.visitor.SQLEvalVisitor;
+import com.alibaba.druid.util.Utils;
+
+import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.TabularData;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Map;
 
-import javax.management.openmbean.CompositeData;
-import javax.management.openmbean.TabularData;
-
-import com.alibaba.druid.util.Utils;
-
 public class JSONWriter {
 
     private StringBuilder    out;
 
-    private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
 
     public JSONWriter(){
         this.out = new StringBuilder();
@@ -128,6 +128,11 @@ public class JSONWriter {
             writeMap((Map) o);
             return;
         }
+        
+        if (o == SQLEvalVisitor.EVAL_VALUE_NULL) {
+            write("null");
+            return;
+        }
 
         throw new IllegalArgumentException("not support type : " + o.getClass());
     }
@@ -137,7 +142,8 @@ public class JSONWriter {
             writeNull();
             return;
         }
-
+        //SimpleDataFormat is not thread-safe, we need to make it local.
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         writeString(dateFormat.format(date));
     }
 

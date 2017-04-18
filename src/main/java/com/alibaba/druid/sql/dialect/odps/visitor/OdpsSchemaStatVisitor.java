@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
  */
 package com.alibaba.druid.sql.dialect.odps.visitor;
 
-import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
-import com.alibaba.druid.sql.dialect.odps.ast.OdpsCreateTableStatement;
-import com.alibaba.druid.sql.dialect.odps.ast.OdpsInsert;
-import com.alibaba.druid.sql.dialect.odps.ast.OdpsInsertStatement;
-import com.alibaba.druid.sql.dialect.odps.ast.OdpsUDTFSQLSelectItem;
+import com.alibaba.druid.sql.ast.SQLExpr;
+import com.alibaba.druid.sql.ast.SQLName;
+import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.dialect.odps.ast.*;
 import com.alibaba.druid.sql.visitor.SchemaStatVisitor;
+import com.alibaba.druid.stat.TableStat;
 
+import java.util.Map;
 
 public class OdpsSchemaStatVisitor extends SchemaStatVisitor implements OdpsASTVisitor {
 
@@ -37,27 +38,52 @@ public class OdpsSchemaStatVisitor extends SchemaStatVisitor implements OdpsASTV
 
     @Override
     public void endVisit(OdpsInsertStatement x) {
-        
+
     }
 
     @Override
     public boolean visit(OdpsInsertStatement x) {
-        return false;
+        return true;
     }
 
     @Override
     public void endVisit(OdpsInsert x) {
-        
+
     }
 
     @Override
     public boolean visit(OdpsInsert x) {
+        setMode(x, TableStat.Mode.Insert);
+
+        setAliasMap();
+
+        SQLExprTableSource tableSource = x.getTableSource();
+        SQLExpr tableName = tableSource.getExpr();
+
+        if (tableName instanceof SQLName) {
+            String ident = ((SQLName) tableName).toString();
+            setCurrentTable(ident);
+
+            TableStat stat = getTableStat(ident);
+            stat.incrementInsertCount();
+
+            Map<String, String> aliasMap = getAliasMap();
+            putAliasMap(aliasMap, tableSource.getAlias(), ident);
+            putAliasMap(aliasMap, ident, ident);
+        }
+
+        for (SQLAssignItem partition : x.getPartitions()) {
+            partition.accept(this);
+        }
+
+        accept(x.getQuery());
+
         return false;
     }
 
     @Override
     public void endVisit(OdpsUDTFSQLSelectItem x) {
-        
+
     }
 
     @Override
@@ -65,5 +91,201 @@ public class OdpsSchemaStatVisitor extends SchemaStatVisitor implements OdpsASTV
         return true;
     }
 
+    @Override
+    public void endVisit(OdpsShowPartitionsStmt x) {
+
+    }
+
+    @Override
+    public boolean visit(OdpsShowPartitionsStmt x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsShowStatisticStmt x) {
+
+    }
+
+    @Override
+    public boolean visit(OdpsShowStatisticStmt x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsSetLabelStatement x) {
+
+    }
+
+    @Override
+    public boolean visit(OdpsSetLabelStatement x) {
+        if (x.getTable() != null) {
+            x.getTable().accept(this);
+        }
+        return false;
+    }
+
+    @Override
+    public void endVisit(OdpsSelectQueryBlock x) {
+        
+    }
+
+    @Override
+    public boolean visit(OdpsSelectQueryBlock x) {
+        return this.visit((SQLSelectQueryBlock) x);
+    }
     
+    @Override
+    public void endVisit(OdpsAnalyzeTableStatement x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsAnalyzeTableStatement x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsAddStatisticStatement x) {
+        
+    }
+
+    @Override
+    public boolean visit(OdpsAddStatisticStatement x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsRemoveStatisticStatement x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsRemoveStatisticStatement x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsStatisticClause.TableCount x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsStatisticClause.TableCount x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsStatisticClause.ExpressionCondition x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsStatisticClause.ExpressionCondition x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsStatisticClause.NullValue x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsStatisticClause.NullValue x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsStatisticClause.ColumnSum x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsStatisticClause.ColumnSum x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsStatisticClause.ColumnMax x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsStatisticClause.ColumnMax x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsStatisticClause.ColumnMin x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsStatisticClause.ColumnMin x) {
+        return true;
+    }
+    
+    @Override
+    public void endVisit(OdpsReadStatement x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsReadStatement x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsShowGrantsStmt x) {
+        
+    }
+
+    @Override
+    public boolean visit(OdpsShowGrantsStmt x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsListStmt x) {
+        
+    }
+
+    @Override
+    public boolean visit(OdpsListStmt x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsGrantStmt x) {
+        super.endVisit((SQLGrantStatement) x);
+    }
+
+    @Override
+    public boolean visit(OdpsGrantStmt x) {
+        return super.visit((SQLGrantStatement) x);
+    }
+
+    @Override
+    public void endVisit(OdpsLateralViewTableSource x) {
+        
+    }
+    
+    @Override
+    public boolean visit(OdpsLateralViewTableSource x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OdpsValuesTableSource x) {
+
+    }
+
+    @Override
+    public boolean visit(OdpsValuesTableSource x) {
+        Map<String, String> aliasMap = getAliasMap();
+        if (aliasMap != null && x.getAlias() != null) {
+            putAliasMap(aliasMap, x.getAlias(), null);
+            addSubQuery(x.getAlias(), x);
+        }
+        return false;
+    }
 }

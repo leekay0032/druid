@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,23 +25,20 @@ import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
 import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
 import com.alibaba.druid.sql.dialect.odps.visitor.OdpsASTVisitor;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
+import com.alibaba.druid.util.JdbcConstants;
 
 public class OdpsCreateTableStatement extends SQLCreateTableStatement {
 
-    private boolean                     ifNotExiists     = false;
+    private SQLExprTableSource like;
 
-    private SQLExprTableSource          like;
-
-    protected SQLExpr                   comment;
+    protected SQLExpr comment;
 
     protected List<SQLColumnDefinition> partitionColumns = new ArrayList<SQLColumnDefinition>(2);
 
-    public boolean isIfNotExiists() {
-        return ifNotExiists;
-    }
+    protected SQLExpr lifecycle;
 
-    public void setIfNotExiists(boolean ifNotExiists) {
-        this.ifNotExiists = ifNotExiists;
+    public OdpsCreateTableStatement(){
+        super(JdbcConstants.ODPS);
     }
 
     public SQLExprTableSource getLike() {
@@ -68,6 +65,21 @@ public class OdpsCreateTableStatement extends SQLCreateTableStatement {
         return partitionColumns;
     }
     
+    public void addPartitionColumn(SQLColumnDefinition column) {
+        if (column != null) {
+            column.setParent(this);
+        }
+        this.partitionColumns.add(column);
+    }
+
+    public SQLExpr getLifecycle() {
+        return lifecycle;
+    }
+
+    public void setLifecycle(SQLExpr lifecycle) {
+        this.lifecycle = lifecycle;
+    }
+
     @Override
     protected void accept0(SQLASTVisitor visitor) {
         accept0((OdpsASTVisitor) visitor);
@@ -78,7 +90,10 @@ public class OdpsCreateTableStatement extends SQLCreateTableStatement {
             this.acceptChild(visitor, tableSource);
             this.acceptChild(visitor, tableElementList);
             this.acceptChild(visitor, partitionColumns);
+            this.acceptChild(visitor, lifecycle);
+            this.acceptChild(visitor, select);
         }
         visitor.endVisit(this);
-    }    
+    }
+
 }

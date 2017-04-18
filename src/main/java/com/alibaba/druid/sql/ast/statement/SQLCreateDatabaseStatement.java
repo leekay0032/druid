@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,29 @@
  */
 package com.alibaba.druid.sql.ast.statement;
 
+import java.util.List;
+
+import com.alibaba.druid.sql.ast.SQLCommentHint;
 import com.alibaba.druid.sql.ast.SQLName;
 import com.alibaba.druid.sql.ast.SQLStatementImpl;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
 
 public class SQLCreateDatabaseStatement extends SQLStatementImpl {
 
-    private SQLName name;
+    private SQLName              name;
 
-    private String  characterSet;
-    private String  collate;
+    private String               characterSet;
+    private String               collate;
+
+    private List<SQLCommentHint> hints;
+    
+    protected boolean            ifNotExists = false;
 
     public SQLCreateDatabaseStatement(){
+    }
+    
+    public SQLCreateDatabaseStatement(String dbType){
+        super (dbType);
     }
 
     @Override
@@ -59,6 +70,22 @@ public class SQLCreateDatabaseStatement extends SQLStatementImpl {
 
     public void setCollate(String collate) {
         this.collate = collate;
+    }
+
+    public List<SQLCommentHint> getHints() {
+        return hints;
+    }
+
+    public void setHints(List<SQLCommentHint> hints) {
+        this.hints = hints;
+    }
+    
+    public boolean isIfNotExists() {
+        return ifNotExists;
+    }
+    
+    public void setIfNotExists(boolean ifNotExists) {
+        this.ifNotExists = ifNotExists;
     }
 
 }

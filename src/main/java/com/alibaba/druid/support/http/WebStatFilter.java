@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,6 @@
  * limitations under the License.
  */
 package com.alibaba.druid.support.http;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpServletResponseWrapper;
 
 import com.alibaba.druid.filter.stat.StatFilterContext;
 import com.alibaba.druid.support.http.stat.WebAppStat;
@@ -46,17 +30,32 @@ import com.alibaba.druid.util.DruidWebUtils;
 import com.alibaba.druid.util.PatternMatcher;
 import com.alibaba.druid.util.ServletPathMatcher;
 
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletResponseWrapper;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * 用于配置Web和Druid数据源之间的管理关联监控统计
  * 
- * @author wenshao <szujobs@htomail.com>
- * @author Zhangming Qi <qizhanming@gmail.com>
+ * @author wenshao [szujobs@htomail.com]
+ * @author Zhangming Qi [qizhanming@gmail.com]
  */
 public class WebStatFilter extends AbstractWebStatImpl implements Filter {
 
     private final static Log   LOG                               = LogFactory.getLog(WebStatFilter.class);
 
-    public final static String PARAM_NAME_PORFILE_ENABLE         = "profileEnable";
+    public final static String PARAM_NAME_PROFILE_ENABLE         = "profileEnable";
     public final static String PARAM_NAME_SESSION_STAT_ENABLE    = "sessionStatEnable";
     public final static String PARAM_NAME_SESSION_STAT_MAX_COUNT = "sessionStatMaxCount";
     public static final String PARAM_NAME_EXCLUSIONS             = "exclusions";
@@ -186,7 +185,7 @@ public class WebStatFilter extends AbstractWebStatImpl implements Filter {
     }
 
     public boolean isExclusion(String requestURI) {
-        if (excludesPattern == null) {
+        if (excludesPattern == null || requestURI == null) {
             return false;
         }
 
@@ -250,7 +249,7 @@ public class WebStatFilter extends AbstractWebStatImpl implements Filter {
         }
 
         {
-            String param = config.getInitParameter(PARAM_NAME_PORFILE_ENABLE);
+            String param = config.getInitParameter(PARAM_NAME_PROFILE_ENABLE);
             if (param != null && param.trim().length() != 0) {
                 param = param.trim();
                 if ("true".equals(param)) {
@@ -258,7 +257,7 @@ public class WebStatFilter extends AbstractWebStatImpl implements Filter {
                 } else if ("false".equals(param)) {
                     this.profileEnable = false;
                 } else {
-                    LOG.error("WebStatFilter Parameter '" + PARAM_NAME_PORFILE_ENABLE + "' config error");
+                    LOG.error("WebStatFilter Parameter '" + PARAM_NAME_PROFILE_ENABLE + "' config error");
                 }
             }
         }
@@ -316,8 +315,8 @@ public class WebStatFilter extends AbstractWebStatImpl implements Filter {
     }
 
     public final static class StatHttpServletResponseWrapper extends HttpServletResponseWrapper implements HttpServletResponse {
-
-        private int status;
+        //初始值应该设置为：HttpServletResponse.SC_OK，而不是 0。
+        private int status = HttpServletResponse.SC_OK;
 
         public StatHttpServletResponseWrapper(HttpServletResponse response){
             super(response);
@@ -328,6 +327,7 @@ public class WebStatFilter extends AbstractWebStatImpl implements Filter {
             this.status = statusCode;
         }
 
+        @SuppressWarnings("deprecation")
         public void setStatus(int statusCode, String statusMessage) {
             super.setStatus(statusCode, statusMessage);
             this.status = statusCode;

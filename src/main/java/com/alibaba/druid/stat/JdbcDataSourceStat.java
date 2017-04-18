@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,19 @@
  */
 package com.alibaba.druid.stat;
 
+import com.alibaba.druid.Constants;
+import com.alibaba.druid.filter.Filter;
+import com.alibaba.druid.filter.stat.StatFilter;
+import com.alibaba.druid.proxy.jdbc.DataSourceProxy;
+import com.alibaba.druid.support.logging.Log;
+import com.alibaba.druid.support.logging.LogFactory;
+import com.alibaba.druid.util.Histogram;
+
+import javax.management.JMException;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.TabularData;
+import javax.management.openmbean.TabularDataSupport;
+import javax.management.openmbean.TabularType;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -25,20 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
-import javax.management.JMException;
-import javax.management.openmbean.CompositeType;
-import javax.management.openmbean.TabularData;
-import javax.management.openmbean.TabularDataSupport;
-import javax.management.openmbean.TabularType;
-
-import com.alibaba.druid.Constants;
-import com.alibaba.druid.filter.Filter;
-import com.alibaba.druid.filter.stat.StatFilter;
-import com.alibaba.druid.proxy.jdbc.DataSourceProxy;
-import com.alibaba.druid.support.logging.Log;
-import com.alibaba.druid.support.logging.LogFactory;
-import com.alibaba.druid.util.Histogram;
 
 public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
 
@@ -52,7 +51,7 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
     private final JdbcResultSetStat                             resultSetStat           = new JdbcResultSetStat();
     private final JdbcStatementStat                             statementStat           = new JdbcStatementStat();
 
-    private int                                                 maxSqlSize              = 1000 * 1;
+    private int                                                 maxSqlSize              = 1000;
 
     private ReentrantReadWriteLock                              lock                    = new ReentrantReadWriteLock();
     private final LinkedHashMap<String, JdbcSqlStat>            sqlStatMap;
@@ -74,6 +73,7 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
     private final AtomicLong                                    clobOpenCount           = new AtomicLong();
 
     private final AtomicLong                                    blobOpenCount           = new AtomicLong();
+    private final AtomicLong                                    keepAliveCheckCount      = new AtomicLong();
 
     private boolean                                             resetStatEnable         = true;
 
@@ -364,8 +364,7 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
         }
 
         List<JdbcSqlStatValue> values = new ArrayList<JdbcSqlStatValue>(stats.size());
-        for (int i = 0; i < stats.size(); ++i) {
-            JdbcSqlStat stat = stats.get(i);
+        for (JdbcSqlStat stat : stats) {
             JdbcSqlStatValue value = stat.getValueAndReset();
             if (value.getExecuteCount() == 0 && value.getRunningCount() == 0) {
                 continue;
@@ -379,9 +378,7 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
         List<JdbcSqlStat> stats = new ArrayList<JdbcSqlStat>(sqlStatMap.size());
         lock.readLock().lock();
         try {
-            Iterator<Map.Entry<String, JdbcSqlStat>> iter = sqlStatMap.entrySet().iterator();
-            while (iter.hasNext()) {
-                Map.Entry<String, JdbcSqlStat> entry = iter.next();
+            for (Map.Entry<String, JdbcSqlStat> entry : sqlStatMap.entrySet()) {
                 JdbcSqlStat stat = entry.getValue();
                 if (stat.getRunningCount() >= 0) {
                     stats.add(entry.getValue());
@@ -392,8 +389,7 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
         }
 
         List<JdbcSqlStatValue> values = new ArrayList<JdbcSqlStatValue>(stats.size());
-        for (int i = 0; i < stats.size(); ++i) {
-            JdbcSqlStat stat = stats.get(i);
+        for (JdbcSqlStat stat : stats) {
             JdbcSqlStatValue value = stat.getValue(false);
             if (value.getRunningCount() > 0) {
                 values.add(value);
@@ -502,4 +498,15 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
         blobOpenCount.incrementAndGet();
     }
 
+    public long getKeepAliveCheckCount() {
+        return keepAliveCheckCount.get();
+    }
+
+    public long getKeepAliveCheckCountAndReset() {
+        return keepAliveCheckCount.getAndSet(0);
+    }
+
+    public void addKeepAliveCheckCount(long delta) {
+        keepAliveCheckCount.addAndGet(delta);
+    }
 }

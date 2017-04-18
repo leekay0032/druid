@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,14 @@ public class SQLDropIndexStatement extends SQLStatementImpl implements SQLDDLSta
 
     private SQLExpr            indexName;
     private SQLExprTableSource tableName;
+    
+    public SQLDropIndexStatement() {
+        
+    }
+    
+    public SQLDropIndexStatement(String dbType) {
+        super (dbType);
+    }
 
     public SQLExpr getIndexName() {
         return indexName;

@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,14 +45,12 @@ import com.alibaba.druid.sql.ast.statement.SQLSetStatement;
 import com.alibaba.druid.sql.ast.statement.SQLUnionQuery;
 import com.alibaba.druid.sql.ast.statement.SQLUpdateStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.expr.MySqlOutFileExpr;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlAlterTableStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlCreateTableStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlDeleteStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlInsertStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlReplaceStatement;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectGroupBy;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock.Limit;
+import com.alibaba.druid.sql.ast.SQLLimit;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlShowCreateTableStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlUnionQuery;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlUpdateStatement;
@@ -73,8 +71,9 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
 
     private final WallConfig      config;
     private final WallProvider    provider;
-    private final List<Violation> violations  = new ArrayList<Violation>();
-    private boolean               sqlModified = false;
+    private final List<Violation> violations      = new ArrayList<Violation>();
+    private boolean               sqlModified     = false;
+    private boolean               sqlEndOfComment = false;
 
     public MySqlWallVisitor(WallProvider provider){
         this.config = provider.getConfig();
@@ -139,11 +138,6 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
     }
 
     public boolean visit(SQLSelectGroupByClause x) {
-        WallVisitorUtils.checkHaving(this, x.getHaving());
-        return true;
-    }
-
-    public boolean visit(MySqlSelectGroupBy x) {
         WallVisitorUtils.checkHaving(this, x.getHaving());
         return true;
     }
@@ -213,14 +207,14 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
     }
 
     @Override
-    public boolean visit(Limit x) {
+    public boolean visit(SQLLimit x) {
         if (x.getRowCount() instanceof SQLNumericLiteralExpr) {
             WallContext context = WallContext.current();
 
             int rowCount = ((SQLNumericLiteralExpr) x.getRowCount()).getNumber().intValue();
             if (rowCount == 0) {
                 if (context != null) {
-                    context.incrementWarnnings();
+                    context.incrementWarnings();
                 }
 
                 if (!provider.getConfig().isLimitZeroAllow()) {
@@ -403,7 +397,7 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
     @Override
     public boolean visit(SQLCreateTableStatement x) {
         WallVisitorUtils.check(this, x);
-        return true;
+        return false;
     }
 
     @Override
@@ -413,12 +407,6 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
     }
 
     public boolean visit(SQLAlterTableStatement x) {
-        WallVisitorUtils.check(this, x);
-        return true;
-    }
-
-    @Override
-    public boolean visit(MySqlAlterTableStatement x) {
         WallVisitorUtils.check(this, x);
         return true;
     }
@@ -445,72 +433,13 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
 
     @Override
     public boolean visit(SQLCommentHint x) {
-        String text = x.getText();
-        text = text.trim();
-        if (text.startsWith("!")) {
-            text = text.substring(1);
-        }
-
-        if (text.length() == 0) {
-            return true;
-        }
-
-        if (Character.isDigit(text.charAt(0))) {
-            addViolation(new IllegalSQLObjectViolation(ErrorCode.EVIL_HINTS, "evil hints", SQLUtils.toMySqlString(x)));
-        }
-
-        text = text.toLowerCase();
-
-        for (int i = 0; i < text.length(); ++i) {
-            char ch = text.charAt(i);
-            switch (ch) {
-                case ';':
-                case '>':
-                case '=':
-                case '<':
-                case '&':
-                case '|':
-                case '^':
-                case '\n':
-                    addViolation(new IllegalSQLObjectViolation(ErrorCode.EVIL_HINTS, "evil hints",
-                                                               SQLUtils.toMySqlString(x)));
-                default:
-                    break;
-            }
-        }
-
-        if (text.indexOf("or") != -1 //
-            || text.indexOf("and") != -1 //
-            || text.indexOf("union") != -1 //
-
-            || text.indexOf("select") != -1 //
-            || text.indexOf("delete") != -1 //
-            || text.indexOf("insert") != -1 //
-            || text.indexOf("update") != -1 //
-            || text.indexOf("into") != -1 //
-
-            || text.indexOf("create") != -1 //
-            || text.indexOf("drop") != -1 //
-            || text.indexOf("alter") != -1 //
-            || text.indexOf("truncate") != -1 //
-
-            || text.indexOf("information_schema") != -1 //
-            || text.indexOf("mysql") != -1 //
-            || text.indexOf("performance_schema") != -1 //
-
-            || text.indexOf("sleep") != -1 //
-            || text.indexOf("benchmark") != -1 //
-            || text.indexOf("load_file") != -1 //
-        ) {
-            addViolation(new IllegalSQLObjectViolation(ErrorCode.EVIL_HINTS, "evil hints", SQLUtils.toMySqlString(x)));
-        }
-
+        WallVisitorUtils.check(this, x);
         return true;
     }
 
     @Override
     public boolean visit(MySqlShowCreateTableStatement x) {
-        String tableName = ((SQLName) x.getName()).getSimleName();
+        String tableName = ((SQLName) x.getName()).getSimpleName();
         WallContext context = WallContext.current();
         if (context != null) {
             WallSqlTableStat tableStat = context.getTableStat(tableName);
@@ -525,4 +454,15 @@ public class MySqlWallVisitor extends MySqlASTVisitorAdapter implements WallVisi
     public boolean visit(SQLCreateTriggerStatement x) {
         return false;
     }
+
+    @Override
+    public boolean isSqlEndOfComment() {
+        return this.sqlEndOfComment;
+    }
+
+    @Override
+    public void setSqlEndOfComment(boolean sqlEndOfComment) {
+        this.sqlEndOfComment = sqlEndOfComment;
+    }
+    
 }

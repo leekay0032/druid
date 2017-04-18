@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,15 +24,8 @@ public class WrapperAdapter implements Wrapper {
 
     @Override
     public boolean isWrapperFor(Class<?> iface) {
-        if (iface == null) {
-            return false;
-        }
+        return iface != null && iface.isInstance(this);
 
-        if (iface.isInstance(this)) {
-            return true;
-        }
-
-        return false;
     }
 
     @SuppressWarnings("unchecked")

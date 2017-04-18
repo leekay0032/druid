@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ public class MustParameterizedTest3 extends TestCase {
         Assert.assertTrue(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = ?", config));
         Assert.assertFalse(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = 7", config));
         Assert.assertTrue(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = ? union select * from t", config));
-        Assert.assertFalse(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = ? union select 1, 2, 3", config));
+        Assert.assertFalse(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = ? union select 1, 2, 3 --", config));
         Assert.assertFalse(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = ? union select * from t fid = fid", config));
         Assert.assertFalse(WallUtils.isValidateMySql("select 1, 2, 3 from t where id  = ? union select * from t fid > 5", config));
     }

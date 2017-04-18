@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,8 @@ public class SQLAlterTableAddIndex extends SQLObjectImpl implements SQLAlterTabl
     private String                           type;
 
     private String                           using;
+    
+    private boolean                          key = false;
 
     @Override
     protected void accept0(SQLASTVisitor visitor) {
@@ -53,6 +55,13 @@ public class SQLAlterTableAddIndex extends SQLObjectImpl implements SQLAlterTabl
 
     public List<SQLSelectOrderByItem> getItems() {
         return items;
+    }
+    
+    public void addItem(SQLSelectOrderByItem item) {
+        if (item != null) {
+            item.setParent(this);
+        }
+        this.items.add(item);
     }
 
     public SQLName getName() {
@@ -79,4 +88,11 @@ public class SQLAlterTableAddIndex extends SQLObjectImpl implements SQLAlterTabl
         this.using = using;
     }
 
+    public boolean isKey() {
+        return key;
+    }
+
+    public void setKey(boolean key) {
+        this.key = key;
+    }
 }

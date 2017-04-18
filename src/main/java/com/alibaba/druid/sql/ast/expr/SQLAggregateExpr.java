@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.util.List;
 
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLExprImpl;
+import com.alibaba.druid.sql.ast.SQLKeep;
 import com.alibaba.druid.sql.ast.SQLOrderBy;
 import com.alibaba.druid.sql.ast.SQLOver;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
@@ -29,8 +30,9 @@ public class SQLAggregateExpr extends SQLExprImpl implements Serializable {
 
     private static final long     serialVersionUID = 1L;
     protected String              methodName;
-    protected Option              option;
+    protected SQLAggregateOption  option;
     protected final List<SQLExpr> arguments        = new ArrayList<SQLExpr>();
+    protected SQLKeep             keep;
     protected SQLOver             over;
     protected SQLOrderBy          withinGroup;
     protected boolean             ignoreNulls      = false;
@@ -39,7 +41,7 @@ public class SQLAggregateExpr extends SQLExprImpl implements Serializable {
         this.methodName = methodName;
     }
 
-    public SQLAggregateExpr(String methodName, Option option){
+    public SQLAggregateExpr(String methodName, SQLAggregateOption option){
         this.methodName = methodName;
         this.option = option;
     }
@@ -64,16 +66,23 @@ public class SQLAggregateExpr extends SQLExprImpl implements Serializable {
         this.withinGroup = withinGroup;
     }
 
-    public Option getOption() {
+    public SQLAggregateOption getOption() {
         return this.option;
     }
 
-    public void setOption(Option option) {
+    public void setOption(SQLAggregateOption option) {
         this.option = option;
     }
 
     public List<SQLExpr> getArguments() {
         return this.arguments;
+    }
+    
+    public void addArgument(SQLExpr argument) {
+        if (argument != null) {
+            argument.setParent(this);
+        }
+        this.arguments.add(argument);
     }
 
     public SQLOver getOver() {
@@ -81,7 +90,21 @@ public class SQLAggregateExpr extends SQLExprImpl implements Serializable {
     }
 
     public void setOver(SQLOver over) {
+        if (over != null) {
+            over.setParent(this);
+        }
         this.over = over;
+    }
+    
+    public SQLKeep getKeep() {
+        return keep;
+    }
+
+    public void setKeep(SQLKeep keep) {
+        if (keep != null) {
+            keep.setParent(this);
+        }
+        this.keep = keep;
     }
     
     public boolean isIgnoreNulls() {
@@ -153,7 +176,4 @@ public class SQLAggregateExpr extends SQLExprImpl implements Serializable {
         return true;
     }
 
-    public static enum Option {
-        DISTINCT, ALL, UNIQUE
-    }
 }

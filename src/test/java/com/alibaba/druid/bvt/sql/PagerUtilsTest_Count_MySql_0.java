@@ -29,6 +29,13 @@ public class PagerUtilsTest_Count_MySql_0 extends TestCase {
         Assert.assertEquals("SELECT COUNT(*)\n" + //
                             "FROM t", result);
     }
+    
+    public void test_mysql_3() throws Exception {
+        String sql = "select distinct id from t order by id";
+        String result = PagerUtils.count(sql, JdbcConstants.MYSQL);
+        Assert.assertEquals("SELECT COUNT(DISTINCT id)\n" + //
+                            "FROM t", result);
+    }
 
     public void test_mysql_group_0() throws Exception {
         String sql = "select type, count(*) from t group by type";
@@ -44,11 +51,11 @@ public class PagerUtilsTest_Count_MySql_0 extends TestCase {
         String sql = "select id, name from t1 union select id, name from t2 order by id";
         String result = PagerUtils.count(sql, JdbcConstants.MYSQL);
         Assert.assertEquals("SELECT COUNT(*)\n" + //
-                            "FROM (SELECT id, name" + //
-                            "\n\tFROM t1" + //
+                            "FROM ((SELECT id, name" + //
+                            "\n\tFROM t1)" + //
                             "\n\tUNION" + //
-                            "\n\tSELECT id, name" + //
-                            "\n\tFROM t2" + //
+                            "\n\t(SELECT id, name" + //
+                            "\n\tFROM t2)" + //
                             "\n\t) ALIAS_COUNT", result);
     }
 }

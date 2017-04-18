@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ public class SQLIdentifierExpr extends SQLExprImpl implements SQLName {
         this.name = name;
     }
 
-    public String getSimleName() {
+    public String getSimpleName() {
         return name;
     }
 
@@ -97,4 +97,7 @@ public class SQLIdentifierExpr extends SQLExprImpl implements SQLName {
         return true;
     }
 
+    public String toString() {
+        return this.name;
+    }
 }

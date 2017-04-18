@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.alibaba.druid.sql.ast.expr;
 
 import java.io.Serializable;
 
+import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLExprImpl;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
@@ -27,16 +28,25 @@ public class SQLBinaryOpExpr extends SQLExprImpl implements Serializable {
     private SQLExpr           left;
     private SQLExpr           right;
     private SQLBinaryOperator operator;
+    private String            dbType;
 
     public SQLBinaryOpExpr(){
 
     }
 
-    public SQLBinaryOpExpr(SQLExpr left, SQLBinaryOperator operator, SQLExpr right){
+    public SQLBinaryOpExpr(String dbType){
+        this.dbType = dbType;
+    }
 
+    public SQLBinaryOpExpr(SQLExpr left, SQLBinaryOperator operator, SQLExpr right){
+        this(left, operator, right, null);
+    }
+    
+    public SQLBinaryOpExpr(SQLExpr left, SQLBinaryOperator operator, SQLExpr right, String dbType){
         setLeft(left);
         setRight(right);
         this.operator = operator;
+        this.dbType = dbType;
     }
 
     public SQLBinaryOpExpr(SQLExpr left, SQLExpr right, SQLBinaryOperator operator){
@@ -44,6 +54,14 @@ public class SQLBinaryOpExpr extends SQLExprImpl implements Serializable {
         setLeft(left);
         setRight(right);
         this.operator = operator;
+    }
+
+    public String getDbType() {
+        return dbType;
+    }
+
+    public void setDbType(String dbType) {
+        this.dbType = dbType;
     }
 
     public SQLExpr getLeft() {
@@ -127,4 +145,7 @@ public class SQLBinaryOpExpr extends SQLExprImpl implements Serializable {
         return true;
     }
 
+    public String toString() {
+        return SQLUtils.toSQLString(this, getDbType());
+    }
 }

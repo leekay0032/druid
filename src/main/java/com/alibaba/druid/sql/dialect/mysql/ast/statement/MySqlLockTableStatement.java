@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,9 @@
  */
 package com.alibaba.druid.sql.dialect.mysql.ast.statement;
 
+import java.util.List;
+
+import com.alibaba.druid.sql.ast.SQLCommentHint;
 import com.alibaba.druid.sql.ast.SQLName;
 import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
 import com.alibaba.druid.sql.dialect.mysql.visitor.MySqlASTVisitor;
@@ -24,6 +27,8 @@ public class MySqlLockTableStatement extends MySqlStatementImpl {
     private SQLExprTableSource tableSource;
 
     private LockType           lockType;
+    
+    private List<SQLCommentHint> hints;
 
     public SQLExprTableSource getTableSource() {
         return tableSource;
@@ -63,5 +68,13 @@ public class MySqlLockTableStatement extends MySqlStatementImpl {
         LockType(String name){
             this.name = name;
         }
+    }
+
+    public List<SQLCommentHint> getHints() {
+        return hints;
+    }
+
+    public void setHints(List<SQLCommentHint> hints) {
+        this.hints = hints;
     }
 }

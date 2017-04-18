@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2011 Alibaba Group Holding Ltd.
+ * Copyright 1999-2017 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,21 @@ package com.alibaba.druid.sql.dialect.sqlserver.ast.stmt;
 
 import com.alibaba.druid.sql.ast.statement.SQLTableSource;
 import com.alibaba.druid.sql.ast.statement.SQLUpdateStatement;
+import com.alibaba.druid.sql.dialect.sqlserver.ast.SQLServerOutput;
 import com.alibaba.druid.sql.dialect.sqlserver.ast.SQLServerStatement;
 import com.alibaba.druid.sql.dialect.sqlserver.ast.SQLServerTop;
 import com.alibaba.druid.sql.dialect.sqlserver.visitor.SQLServerASTVisitor;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
+import com.alibaba.druid.util.JdbcConstants;
 
 public class SQLServerUpdateStatement extends SQLUpdateStatement implements SQLServerStatement {
 
-    private SQLServerTop   top;
-    private SQLTableSource from;
+    private SQLServerTop    top;
+    private SQLServerOutput output;
+    
+    public SQLServerUpdateStatement(){
+        super (JdbcConstants.SQL_SERVER);
+    }
 
     public SQLServerTop getTop() {
         return top;
@@ -35,12 +41,12 @@ public class SQLServerUpdateStatement extends SQLUpdateStatement implements SQLS
         this.top = top;
     }
 
-    public SQLTableSource getFrom() {
-        return from;
+    public SQLServerOutput getOutput() {
+        return output;
     }
 
-    public void setFrom(SQLTableSource from) {
-        this.from = from;
+    public void setOutput(SQLServerOutput output) {
+        this.output = output;
     }
 
     @Override
@@ -54,6 +60,7 @@ public class SQLServerUpdateStatement extends SQLUpdateStatement implements SQLS
             acceptChild(visitor, top);
             acceptChild(visitor, tableSource);
             acceptChild(visitor, items);
+            acceptChild(visitor, output);
             acceptChild(visitor, from);
             acceptChild(visitor, where);
         }
